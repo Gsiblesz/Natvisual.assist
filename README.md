@@ -4,7 +4,7 @@ Tablero de entregas del estudio NatVisual. El equipo anota piezas, reels y pauta
 
 ## Cómo se usa
 
-1. Entra con la contraseña del estudio. Si no definiste `STUDIO_PASSWORD`, la contraseña local es `estudio`.
+1. Abre el tablero. Si definiste `STUDIO_PASSWORD`, entra con esa contraseña. Si no, el estudio queda abierto.
 2. Añade un cliente, o elige uno y pulsa **Cargar ejemplo**.
 3. Di **Hablar** y prueba: “nueva piezas del feed”, “en curso piezas del feed”, “terminada piezas del feed”. También vale “hoy”, “mañana”, “urgente” y “prioridad alta”.
 4. Arrastra las tarjetas del tablero, revisa la agenda y descarga el ZIP del mes.

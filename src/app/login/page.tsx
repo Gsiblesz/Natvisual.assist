@@ -11,17 +11,14 @@ export default function LoginPage() {
   const router = useRouter();
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [demo, setDemo] = useState(false);
   const [enviando, setEnviando] = useState(false);
+  const [listo, setListo] = useState(false);
 
   useEffect(() => {
     fetch("/api/admin/sesion").then((response) => {
       if (response.ok) router.replace("/natvisual");
+      else setListo(true);
     });
-    fetch("/api/admin/login")
-      .then((response) => response.json())
-      .then((data: { demo?: boolean }) => setDemo(Boolean(data.demo)))
-      .catch(() => setDemo(false));
   }, [router]);
 
   async function entrar(event: React.FormEvent) {
@@ -44,6 +41,14 @@ export default function LoginPage() {
     }
   }
 
+  if (!listo) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-zinc-950 text-zinc-400">
+        Cargando el estudio…
+      </main>
+    );
+  }
+
   return (
     <main className="grid min-h-screen place-items-center bg-zinc-950 px-4 text-zinc-50">
       <form onSubmit={entrar} className="w-full max-w-sm rounded-3xl border border-zinc-800 bg-zinc-900/60 p-6">
@@ -62,11 +67,6 @@ export default function LoginPage() {
           onChange={(event) => setPassword(event.target.value)}
           required
         />
-        {demo ? (
-          <p className="mt-2 text-sm text-zinc-500">
-            Mientras no haya contraseña propia, entra con <span className="text-amber-100">estudio</span>.
-          </p>
-        ) : null}
         {error ? <p className="mt-3 text-sm text-red-300">{error}</p> : null}
         <Button
           type="submit"

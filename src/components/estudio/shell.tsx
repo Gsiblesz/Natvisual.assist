@@ -28,6 +28,7 @@ export function EstudioShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const path = usePathname();
   const [listo, setListo] = useState(false);
+  const [bloqueado, setBloqueado] = useState(false);
   const [cuentas, setCuentas] = useState<Cuenta[]>([]);
   const [cuentaId, setCuentaId] = useState("todas");
   const [tareas, setTareas] = useState<Tarea[]>([]);
@@ -44,10 +45,17 @@ export function EstudioShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const guardada = window.localStorage.getItem("natvisual_cuenta");
     if (guardada) setCuentaId(guardada);
-    fetch("/api/admin/sesion").then((response) => {
-      if (!response.ok) router.replace("/login");
-      else setListo(true);
-    });
+    fetch("/api/admin/sesion")
+      .then(async (response) => {
+        if (!response.ok) {
+          router.replace("/login");
+          return;
+        }
+        const data = (await response.json()) as { locked?: boolean };
+        setBloqueado(Boolean(data.locked));
+        setListo(true);
+      })
+      .catch(() => router.replace("/login"));
   }, [router]);
 
   async function cargar(id = cuentaId) {
@@ -285,9 +293,11 @@ export function EstudioShell({ children }: { children: React.ReactNode }) {
               >
                 Nueva entrega
               </Button>
-              <Button type="button" variant="ghost" className="h-11 text-zinc-400" onClick={salir}>
-                Salir
-              </Button>
+              {bloqueado ? (
+                <Button type="button" variant="ghost" className="h-11 text-zinc-400" onClick={salir}>
+                  Salir
+                </Button>
+              ) : null}
             </div>
           </header>
 
