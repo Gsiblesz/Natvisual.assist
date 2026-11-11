@@ -23,6 +23,9 @@
 # local database
 .data/
 
+# scratch from local tooling
+/agent-tools/
+
 # misc
 .DS_Store
 *.pem
