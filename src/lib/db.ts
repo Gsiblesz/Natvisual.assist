@@ -2,7 +2,18 @@ import { mkdir, readdir, readFile } from "node:fs/promises";
 import { PGlite } from "@electric-sql/pglite";
 import pg from "pg";
 
-const databaseUrl = process.env.DATABASE_URL?.trim() ?? "";
+function limpiarUrl(raw: string) {
+  if (!raw) return "";
+  try {
+    const url = new URL(raw);
+    url.searchParams.delete("channel_binding");
+    return url.toString();
+  } catch {
+    return raw.replace(/([?&])channel_binding=[^&]*/g, "$1").replace(/[?&]$/, "");
+  }
+}
+
+const databaseUrl = limpiarUrl(process.env.DATABASE_URL?.trim() ?? "");
 let pool: pg.Pool | undefined;
 let local: Promise<PGlite> | undefined;
 

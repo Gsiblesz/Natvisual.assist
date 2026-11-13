@@ -1,7 +1,18 @@
 import { readdir, readFile } from "node:fs/promises";
 import pg from "pg";
 
-const url = process.env.DATABASE_URL?.trim() ?? "";
+function limpiarUrl(raw) {
+  if (!raw) return "";
+  try {
+    const url = new URL(raw);
+    url.searchParams.delete("channel_binding");
+    return url.toString();
+  } catch {
+    return raw.replace(/([?&])channel_binding=[^&]*/g, "$1").replace(/[?&]$/, "");
+  }
+}
+
+const url = limpiarUrl(process.env.DATABASE_URL?.trim() ?? "");
 const files = (await readdir("migrations").catch(() => []))
   .filter((f) => f.endsWith(".sql"))
   .sort();
