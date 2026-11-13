@@ -108,6 +108,73 @@ export function Agenda() {
 
   return (
     <div className="space-y-4">
+      <div className="flex items-center justify-between gap-2">
+        <Button type="button" variant="outline" className="h-11 shrink-0 border-zinc-800 px-3" onClick={() => moverMes(-1)}>
+          Anterior
+        </Button>
+        <h2 className="text-center font-heading text-xl font-medium text-white">{titulo}</h2>
+        <Button type="button" variant="outline" className="h-11 shrink-0 border-zinc-800 px-3" onClick={() => moverMes(1)}>
+          Siguiente
+        </Button>
+      </div>
+
+      <div className="hidden gap-2 md:grid md:grid-cols-7">
+        {DIAS.map((dia) => (
+          <p key={dia} className="px-2 text-xs uppercase tracking-wide text-zinc-500">
+            {dia}
+          </p>
+        ))}
+        {celdas.map((celda, indice) => (
+          <div
+            key={celda?.iso ?? `vacio-${indice}`}
+            className={`min-h-28 rounded-2xl border p-2 ${
+              celda?.iso === hoy ? "border-amber-400/40 bg-amber-400/5" : "border-zinc-800/80 bg-zinc-900/30"
+            }`}
+          >
+            {celda ? (
+              <>
+                <p className="text-sm text-zinc-400">{celda.dia}</p>
+                <div className="mt-1 space-y-1">
+                  {celda.tareas.map((tarea) => (
+                    <button
+                      key={tarea.id}
+                      type="button"
+                      onClick={() => estudio.onEditar(tarea)}
+                      className="block w-full truncate rounded-lg bg-zinc-950 px-2 py-1 text-left text-xs text-zinc-100"
+                    >
+                      {tarea.titulo}
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : null}
+          </div>
+        ))}
+      </div>
+
+      <div className="space-y-3 md:hidden">
+        {delMes.length === 0 ? (
+          <p className="rounded-3xl border border-zinc-800/80 bg-zinc-900/40 p-4 text-sm text-zinc-400">
+            Este mes no tiene entregas con fecha.
+          </p>
+        ) : (
+          delMes.map((tarea) => (
+            <button
+              key={tarea.id}
+              type="button"
+              onClick={() => estudio.onEditar(tarea)}
+              className="block w-full rounded-3xl border border-zinc-800/80 bg-zinc-900/40 p-4 text-left"
+            >
+              <p className="text-sm text-amber-200/90">{formatearFecha(tarea.fecha_entrega)}</p>
+              <p className="mt-1 font-medium text-white">{tarea.titulo}</p>
+              <p className="mt-1 text-sm text-zinc-400">
+                {tarea.nombre_cliente} · {etiquetaPrioridad(tarea)}
+              </p>
+            </button>
+          ))
+        )}
+      </div>
+
       <section className="space-y-4 rounded-3xl border border-zinc-800/80 bg-zinc-900/40 p-4">
         <div>
           <h2 className="text-lg font-semibold text-white">Calendario del cliente</h2>
@@ -216,73 +283,6 @@ export function Agenda() {
         )}
         {mensaje ? <p className="text-sm text-amber-100">{mensaje}</p> : null}
       </section>
-
-      <div className="flex items-center justify-between gap-3">
-        <Button type="button" variant="outline" className="border-zinc-800" onClick={() => moverMes(-1)}>
-          Mes anterior
-        </Button>
-        <h2 className="text-lg font-semibold text-white">{titulo}</h2>
-        <Button type="button" variant="outline" className="border-zinc-800" onClick={() => moverMes(1)}>
-          Mes siguiente
-        </Button>
-      </div>
-
-      <div className="hidden gap-2 md:grid md:grid-cols-7">
-        {DIAS.map((dia) => (
-          <p key={dia} className="px-2 text-xs uppercase tracking-wide text-zinc-500">
-            {dia}
-          </p>
-        ))}
-        {celdas.map((celda, indice) => (
-          <div
-            key={celda?.iso ?? `vacio-${indice}`}
-            className={`min-h-28 rounded-2xl border p-2 ${
-              celda?.iso === hoy ? "border-amber-400/40 bg-amber-400/5" : "border-zinc-800/80 bg-zinc-900/30"
-            }`}
-          >
-            {celda ? (
-              <>
-                <p className="text-sm text-zinc-400">{celda.dia}</p>
-                <div className="mt-1 space-y-1">
-                  {celda.tareas.map((tarea) => (
-                    <button
-                      key={tarea.id}
-                      type="button"
-                      onClick={() => estudio.onEditar(tarea)}
-                      className="block w-full truncate rounded-lg bg-zinc-950 px-2 py-1 text-left text-xs text-zinc-100"
-                    >
-                      {tarea.titulo}
-                    </button>
-                  ))}
-                </div>
-              </>
-            ) : null}
-          </div>
-        ))}
-      </div>
-
-      <div className="space-y-3 md:hidden">
-        {delMes.length === 0 ? (
-          <p className="rounded-3xl border border-zinc-800/80 bg-zinc-900/40 p-4 text-sm text-zinc-400">
-            Este mes no tiene entregas con fecha.
-          </p>
-        ) : (
-          delMes.map((tarea) => (
-            <button
-              key={tarea.id}
-              type="button"
-              onClick={() => estudio.onEditar(tarea)}
-              className="block w-full rounded-3xl border border-zinc-800/80 bg-zinc-900/40 p-4 text-left"
-            >
-              <p className="text-sm text-amber-200/90">{formatearFecha(tarea.fecha_entrega)}</p>
-              <p className="mt-1 font-medium text-white">{tarea.titulo}</p>
-              <p className="mt-1 text-sm text-zinc-400">
-                {tarea.nombre_cliente} · {etiquetaPrioridad(tarea)}
-              </p>
-            </button>
-          ))
-        )}
-      </div>
 
       <section className="rounded-3xl border border-zinc-800/80 bg-zinc-900/40 p-4">
         <h2 className="text-base font-semibold text-white">Avisos recientes</h2>

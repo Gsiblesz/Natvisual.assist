@@ -92,7 +92,12 @@ export function EstudioShell({ children }: { children: React.ReactNode }) {
     window.localStorage.setItem("natvisual_cuenta", cuentaId);
     Promise.all([api<{ cuentas: Cuenta[] }>("/api/admin/cuentas"), cargar(cuentaId)])
       .then(([lista]) => {
-        if (vivo) setCuentas(lista.cuentas || []);
+        if (!vivo) return;
+        const siguientes = lista.cuentas || [];
+        setCuentas(siguientes);
+        if (cuentaId !== "todas" && !siguientes.some((cuenta) => String(cuenta.id) === String(cuentaId))) {
+          setCuentaId("todas");
+        }
       })
       .catch((err: Error) => {
         if (vivo) setError(err.message);
@@ -236,7 +241,7 @@ export function EstudioShell({ children }: { children: React.ReactNode }) {
         <div className="relative mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-4 pb-28 sm:px-6 lg:pb-10">
           <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <h1 className="text-2xl font-semibold tracking-tight text-white">NatVisual</h1>
+              <h1 className="font-heading text-3xl font-medium tracking-tight text-white">NatVisual</h1>
               <p className="text-sm text-zinc-400">Pendientes por voz. Al cumplirlas, pasan a terminadas.</p>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -335,11 +340,17 @@ export function EstudioShell({ children }: { children: React.ReactNode }) {
           {!cargando && tareas.length === 0 && !error ? (
             <div className="flex flex-col gap-3 rounded-3xl border border-zinc-800/80 bg-zinc-900/40 p-4 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm text-zinc-300">
-                Este tablero está vacío. Carga un mes de ejemplo o crea la primera entrega.
+                {cuentas.length === 0
+                  ? "Añade el primer cliente arriba. Después anotas entregas o cargas un mes de ejemplo."
+                  : cuentaId === "todas"
+                    ? "Elige un cliente para cargar su ejemplo, o crea una entrega nueva."
+                    : "Este cliente no tiene entregas. Carga un mes de ejemplo o crea la primera."}
               </p>
-              <Button type="button" variant="outline" className="border-zinc-800" onClick={ejemplo}>
-                Cargar ejemplo
-              </Button>
+              {cuentaId !== "todas" ? (
+                <Button type="button" variant="outline" className="border-zinc-800" onClick={ejemplo}>
+                  Cargar ejemplo
+                </Button>
+              ) : null}
             </div>
           ) : null}
           {children}

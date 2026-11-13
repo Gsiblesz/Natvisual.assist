@@ -7,13 +7,13 @@ import { useEstudio } from "./contexto";
 export function Tablero() {
   const { tareas, onMover, onEditar } = useEstudio();
   return (
-    <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2">
+    <div className="flex flex-col gap-3 md:snap-x md:snap-mandatory md:flex-row md:overflow-x-auto md:pb-2">
       {ESTADOS.map((estado) => {
         const columna = tareas.filter((tarea) => tarea.estado === estado.id);
         return (
           <section
             key={estado.id}
-            className="flex w-[85vw] shrink-0 snap-start flex-col rounded-3xl border border-zinc-800/80 bg-zinc-900/40 sm:w-80 lg:w-auto lg:min-w-0 lg:flex-1"
+            className="flex w-full shrink-0 flex-col rounded-3xl border border-zinc-800/80 bg-zinc-900/40 md:w-80 md:snap-start lg:w-auto lg:min-w-0 lg:flex-1"
             onDragOver={(event) => event.preventDefault()}
             onDrop={(event) => {
               event.preventDefault();

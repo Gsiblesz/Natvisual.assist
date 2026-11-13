@@ -117,6 +117,7 @@ export function Informe() {
         {ok ? <p className="text-sm text-emerald-300">{ok}</p> : null}
         {error ? <p className="text-sm text-red-300">{error}</p> : null}
       </section>
+      {!reporte && !error ? <p className="text-sm text-zinc-500">Cargando el mes…</p> : null}
       {resumen ? (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           {(
@@ -129,7 +130,7 @@ export function Informe() {
           ).map(([label, valor]) => (
             <div key={label} className="rounded-3xl border border-zinc-800/80 bg-zinc-900/40 p-4">
               <p className="text-sm text-zinc-500">{label}</p>
-              <p className="mt-1 text-3xl font-semibold text-white">{valor}</p>
+              <p className="mt-1 font-heading text-3xl font-medium text-white">{valor}</p>
             </div>
           ))}
         </div>

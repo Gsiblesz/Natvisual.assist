@@ -162,7 +162,11 @@ export function EntregaDialog({
             <Label htmlFor="nv-cliente" className="text-zinc-400">
               Cliente
             </Label>
-            <Select value={form.cuenta_id} onValueChange={(valor) => valor && set("cuenta_id", valor)}>
+            <Select
+              value={form.cuenta_id}
+              items={Object.fromEntries(cuentas.map((cuenta) => [String(cuenta.id), cuenta.nombre_cliente]))}
+              onValueChange={(valor) => valor && set("cuenta_id", valor)}
+            >
               <SelectTrigger id="nv-cliente" className="mt-1 h-11 w-full border-zinc-800 bg-zinc-950 text-zinc-100">
                 <SelectValue placeholder="Elige un cliente" />
               </SelectTrigger>
@@ -234,7 +238,11 @@ export function EntregaDialog({
           </div>
           <div>
             <Label className="text-zinc-400">Estado</Label>
-            <Select value={form.estado} onValueChange={(valor) => valor && set("estado", valor)}>
+            <Select
+              value={form.estado}
+              items={Object.fromEntries(ESTADOS.map((estado) => [estado.id, estado.label]))}
+              onValueChange={(valor) => valor && set("estado", valor)}
+            >
               <SelectTrigger className="mt-1 h-11 w-full border-zinc-800 bg-zinc-950 text-zinc-100">
                 <SelectValue />
               </SelectTrigger>
