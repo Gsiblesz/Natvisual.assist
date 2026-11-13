@@ -19,8 +19,20 @@ export async function run(fn: () => Promise<unknown>) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
     console.error(error);
-    return NextResponse.json({ error: "No se pudo completar la operación." }, { status: 500 });
+    return NextResponse.json(
+      { error: "No se pudo completar la operación.", detalle: detalleSeguro(error) },
+      { status: 500 },
+    );
   }
+}
+
+function detalleSeguro(error: unknown) {
+  const texto = error instanceof Error ? `${error.name}: ${error.message}` : "error";
+  return texto
+    .replace(/postgres(?:ql)?:\/\/\S+/gi, "[url]")
+    .replace(/npg_[A-Za-z0-9]+/g, "[clave]")
+    .replace(/ep-[a-z0-9-]+\S*/g, "[host]")
+    .slice(0, 180);
 }
 
 export function origen(request: Request) {
