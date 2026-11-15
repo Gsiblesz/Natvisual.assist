@@ -11,11 +11,13 @@ export async function POST(request: Request) {
   }
   const body = (await request.json().catch(() => ({}))) as { password?: string };
   if (!passwordOk(String(body.password ?? ""))) {
+    // Frena a quien prueba claves una tras otra.
+    await new Promise((resolve) => setTimeout(resolve, 800));
     return NextResponse.json({ error: "Contraseña incorrecta." }, { status: 401 });
   }
   const token = signSession();
   const cookie = sessionCookie(token);
-  const response = NextResponse.json({ token, role: "admin" });
+  const response = NextResponse.json({ ok: true, role: "admin" });
   response.cookies.set(cookie.name, cookie.value, cookie.options);
   return response;
 }

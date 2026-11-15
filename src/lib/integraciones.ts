@@ -118,7 +118,11 @@ export async function avisarEquipo(cuentaId: number) {
   const calendario = await ensureCalendario(cuentaId);
   const proximas = await tareasPorVencer(cuentaId, calendario.aviso_horas);
   if (!proximas.length) {
-    return { motivo: "No hay entregas abiertas en la ventana de aviso." };
+    return {
+      motivo: process.env.RESEND_API_KEY?.trim()
+        ? "No hay entregas abiertas en la ventana de aviso."
+        : "No hay entregas por vencer. Además falta Resend en el servidor para mandar correos.",
+    };
   }
   const destinatarios = correos(calendario.correo_equipo);
   const resumen = proximas.map((tarea) => `${tarea.fecha_entrega} · ${tarea.titulo}`).join("\n");

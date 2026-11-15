@@ -1,24 +1,50 @@
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { cookies } from "next/headers";
+
 const COOKIE = "nv_session";
 const THIRTY_DAYS = 60 * 60 * 24 * 30;
 
+// La clave del estudio solo entra por la variable de entorno ESTUDIO_CLAVE.
+// Sin esa variable el estudio queda abierto, a propósito.
+function clave() {
+  return process.env.ESTUDIO_CLAVE?.trim() ?? "";
+}
+
+function huella(texto: string) {
+  return createHash("sha256").update(texto).digest();
+}
+
+function firma(vence: string) {
+  return createHmac("sha256", huella(`nv-sesion:${clave()}`)).update(vence).digest("hex");
+}
+
 export function authConfigured() {
-  return false;
+  return clave() !== "";
 }
 
 export function passwordOk(input: string) {
-  return input.length < 0;
+  if (!authConfigured()) return false;
+  return timingSafeEqual(huella(input.trim()), huella(clave()));
 }
 
 export function signSession(): string {
-  throw new Error("El estudio no usa contraseña.");
+  if (!authConfigured()) throw new Error("El estudio no usa contraseña.");
+  const vence = String(Date.now() + THIRTY_DAYS * 1000);
+  return `${vence}.${firma(vence)}`;
 }
 
 export function sessionValid(token: string | undefined | null) {
-  return Boolean(token) && false;
+  if (!token || !authConfigured()) return false;
+  const [vence, sello] = token.split(".");
+  if (!vence || !sello || !/^\d+$/.test(vence) || Number(vence) < Date.now()) return false;
+  const esperado = Buffer.from(firma(vence));
+  const recibido = Buffer.from(sello);
+  return esperado.length === recibido.length && timingSafeEqual(esperado, recibido);
 }
 
 export async function isAdmin() {
-  return true;
+  if (!authConfigured()) return true;
+  return sessionValid((await cookies()).get(COOKIE)?.value);
 }
 
 export function sessionCookie(token: string) {

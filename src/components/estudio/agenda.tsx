@@ -15,8 +15,8 @@ export function Agenda() {
   const estudio = useEstudio();
   const hoy = fechaEnCaracas();
   const [mes, setMes] = useState(() => {
-    const ahora = new Date();
-    return { anio: ahora.getFullYear(), mes: ahora.getMonth() + 1 };
+    const [anio, mesNumero] = fechaEnCaracas().split("-").map(Number);
+    return { anio, mes: mesNumero };
   });
   const [form, setForm] = useState<Calendario | null>(null);
   const [mensaje, setMensaje] = useState("");

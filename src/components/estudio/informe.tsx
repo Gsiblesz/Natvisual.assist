@@ -7,17 +7,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api, descargarInforme } from "@/lib/api-client";
 import { etiquetaEstado, fieldClass } from "@/lib/etiquetas";
-import { formatearFecha } from "@/lib/fechas";
+import { fechaEnCaracas, formatearFecha } from "@/lib/fechas";
 import { useEstudio } from "./contexto";
 import type { Tarea } from "./tipos";
 
 function mesActual() {
-  const ahora = new Date();
-  return `${ahora.getFullYear()}-${String(ahora.getMonth() + 1).padStart(2, "0")}`;
+  return fechaEnCaracas().slice(0, 7);
 }
 
 export function Informe() {
-  const { cuentaId } = useEstudio();
+  const { cuentaId, tareas } = useEstudio();
   const [mes, setMes] = useState(mesActual);
   const [purgar, setPurgar] = useState(false);
   const [ocupado, setOcupado] = useState(false);
@@ -46,7 +45,8 @@ export function Informe() {
     return () => {
       vivo = false;
     };
-  }, [cuentaId, mes]);
+    // tareas cambia cuando alguien del equipo mueve algo: el informe se vuelve a pedir
+  }, [cuentaId, mes, tareas]);
 
   async function descargar() {
     if (purgar) {

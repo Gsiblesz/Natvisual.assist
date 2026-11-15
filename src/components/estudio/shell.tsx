@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api-client";
@@ -19,6 +19,13 @@ const NAV = [
   { href: "/natvisual/tareas", label: "Tareas" },
   { href: "/natvisual/informe", label: "Informe" },
 ];
+
+const REFRESCO_MS = 15_000;
+
+// Solo cambia el estado si los datos cambiaron, para no pisar lo que alguien está editando.
+function fijar<T>(set: Dispatch<SetStateAction<T>>, valor: T) {
+  set((previo) => (JSON.stringify(previo) === JSON.stringify(valor) ? previo : valor));
+}
 
 function activo(path: string, href: string) {
   return href === "/natvisual" ? path === "/natvisual" : path.startsWith(href);
@@ -41,6 +48,8 @@ export function EstudioShell({ children }: { children: React.ReactNode }) {
   const [nota, setNota] = useState("");
   const [nuevoNombre, setNuevoNombre] = useState("");
   const [dialogo, setDialogo] = useState<Tarea | null | "nueva">(null);
+  const [sinConexion, setSinConexion] = useState(false);
+  const turno = useRef(0);
 
   useEffect(() => {
     const guardada = window.localStorage.getItem("natvisual_cuenta");
@@ -58,32 +67,60 @@ export function EstudioShell({ children }: { children: React.ReactNode }) {
       .catch(() => router.replace("/login"));
   }, [router]);
 
-  async function cargar(id = cuentaId) {
-    setError("");
-    const tareasRes = await api<{ tareas: Tarea[] }>(
-      `/api/natvisual/tareas${id !== "todas" ? `?cuenta_id=${id}` : ""}`,
-    );
-    setTareas(tareasRes.tareas || []);
-    if (id && id !== "todas") {
-      const [cal, avisosRes] = await Promise.all([
-        api<{ calendario: Calendario; feed_url: string; google: boolean; correo: boolean }>(
-          `/api/natvisual/calendarios/${id}`,
-        ),
-        api<{ avisos: Aviso[] }>(`/api/natvisual/avisos?cuenta_id=${id}`),
+  async function cargar(id = cuentaId, silencioso = false) {
+    // Si sale otra carga después de esta, esta respuesta ya no se usa.
+    const mio = ++turno.current;
+    const vigente = () => mio === turno.current;
+    if (!silencioso) setError("");
+    const unaCuenta = Boolean(id) && id !== "todas";
+    const [tareasRes, avisosRes, cal, estado] = await Promise.all([
+      api<{ tareas: Tarea[] }>(`/api/natvisual/tareas${unaCuenta ? `?cuenta_id=${id}` : ""}`),
+      api<{ avisos: Aviso[] }>(`/api/natvisual/avisos${unaCuenta ? `?cuenta_id=${id}` : ""}`),
+      unaCuenta
+        ? api<{ calendario: Calendario; feed_url: string; google: boolean; correo: boolean }>(
+            `/api/natvisual/calendarios/${id}`,
+          )
+        : null,
+      unaCuenta ? null : api<{ google: boolean; correo: boolean }>("/api/natvisual/estado"),
+    ]);
+    if (!vigente()) return;
+    const conexionNueva = cal ?? estado;
+    fijar(setTareas, tareasRes.tareas || []);
+    fijar(setAvisos, avisosRes.avisos || []);
+    fijar(setCalendario, cal ? cal.calendario : null);
+    setFeedUrl(cal?.feed_url || "");
+    fijar(setConexion, { google: !!conexionNueva?.google, correo: !!conexionNueva?.correo });
+  }
+
+  async function refrescar() {
+    if (document.hidden) return;
+    try {
+      const [lista] = await Promise.all([
+        api<{ cuentas: Cuenta[] }>("/api/admin/cuentas"),
+        cargar(cuentaId, true),
       ]);
-      setCalendario(cal.calendario);
-      setFeedUrl(cal.feed_url || "");
-      setConexion({ google: !!cal.google, correo: !!cal.correo });
-      setAvisos(avisosRes.avisos || []);
-    } else {
-      setCalendario(null);
-      setFeedUrl("");
-      const estado = await api<{ google: boolean; correo: boolean }>("/api/natvisual/estado");
-      setConexion({ google: !!estado.google, correo: !!estado.correo });
-      const avisosRes = await api<{ avisos: Aviso[] }>("/api/natvisual/avisos");
-      setAvisos(avisosRes.avisos || []);
+      fijar(setCuentas, lista.cuentas || []);
+      setSinConexion(false);
+    } catch {
+      setSinConexion(true);
     }
   }
+
+  // No hay tiempo real: el tablero vuelve a pedir los datos cada rato y al volver a la pestaña.
+  useEffect(() => {
+    if (!listo) return;
+    const tick = () => void refrescar();
+    const intervalo = window.setInterval(tick, REFRESCO_MS);
+    document.addEventListener("visibilitychange", tick);
+    window.addEventListener("focus", tick);
+    return () => {
+      window.clearInterval(intervalo);
+      document.removeEventListener("visibilitychange", tick);
+      window.removeEventListener("focus", tick);
+    };
+    // refrescar cambia de identidad; cuentaId y listo son los disparadores reales
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listo, cuentaId]);
 
   useEffect(() => {
     if (!listo) return;
@@ -100,7 +137,10 @@ export function EstudioShell({ children }: { children: React.ReactNode }) {
         }
       })
       .catch((err: Error) => {
-        if (vivo) setError(err.message);
+        if (!vivo) return;
+        // Si la marca guardada en este equipo ya no existe, vuelve a «Todos los clientes».
+        if (cuentaId !== "todas") setCuentaId("todas");
+        else setError(err.message);
       })
       .finally(() => {
         if (vivo) setCargando(false);
@@ -354,6 +394,11 @@ export function EstudioShell({ children }: { children: React.ReactNode }) {
             </div>
           ) : null}
           {children}
+          <p className="text-xs text-zinc-500">
+            {sinConexion
+              ? "Sin conexión con el estudio. Vuelvo a intentar solo."
+              : "Lo que anota tu equipo aparece aquí solo, en unos segundos."}
+          </p>
         </div>
         <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-zinc-800 bg-zinc-950/95 backdrop-blur lg:hidden">
           <div className="mx-auto flex max-w-lg pb-[env(safe-area-inset-bottom)]">
