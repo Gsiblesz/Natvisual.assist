@@ -40,13 +40,25 @@ export async function descargarInforme(input: {
     throw new Error(data.error || "No se pudo armar el informe");
   }
   const blob = await response.blob();
+  const nombre = `natvisual-${input.anio}-${String(input.mes).padStart(2, "0")}.zip`;
+  const purgadas = Number(response.headers.get("X-Natvisual-Purgadas") || 0);
+  // En el iPhone, la hoja de compartir deja guardarlo en Archivos o mandarlo por WhatsApp.
+  const archivo = new File([blob], nombre, { type: "application/zip" });
+  if (typeof navigator.canShare === "function" && navigator.canShare({ files: [archivo] })) {
+    try {
+      await navigator.share({ files: [archivo], title: nombre });
+      return { purgadas };
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return { purgadas };
+    }
+  }
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `natvisual-${input.anio}-${String(input.mes).padStart(2, "0")}.zip`;
+  link.download = nombre;
   document.body.appendChild(link);
   link.click();
   link.remove();
-  URL.revokeObjectURL(url);
-  return { purgadas: Number(response.headers.get("X-Natvisual-Purgadas") || 0) };
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  return { purgadas };
 }

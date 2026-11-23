@@ -1,7 +1,7 @@
 import JSZip from "jszip";
 import { NextResponse } from "next/server";
 import { isAdmin } from "@/lib/auth";
-import { armarInforme, EstudioError } from "@/lib/estudio";
+import { armarInforme, csv, EstudioError } from "@/lib/estudio";
 
 export async function POST(request: Request) {
   if (!(await isAdmin())) {
@@ -22,22 +22,38 @@ export async function POST(request: Request) {
       Number(body.mes),
       Boolean(body.purgar),
     );
-    const { reporte, historial, avisos, ics, purgadas, csv } = paquete;
+    const { reporte, historial, avisos, ics, purgadas } = paquete;
     const zip = new JSZip();
     zip.file(
       "entregas.csv",
       csv([
-        ["cliente", "titulo", "estado", "fecha", "etiqueta", "prioridad", "urgencia", "detalle"],
+        ["cliente", "encargo", "tipo", "estado", "entrega", "urgente", "pasos hechos", "notas"],
         ...reporte.tareas.map((tarea) => [
           tarea.nombre_cliente,
           tarea.titulo,
+          tarea.tipo,
           tarea.estado,
           tarea.fecha_entrega ?? "",
-          tarea.etiqueta,
-          String(tarea.prioridad_cliente),
-          String(tarea.urgencia_humana),
+          tarea.urgente ? "sí" : "no",
+          `${tarea.pasos.filter((paso) => paso.hecho_en).length} de ${tarea.pasos.length}`,
           tarea.descripcion,
         ]),
+      ]),
+    );
+    zip.file(
+      "pasos.csv",
+      csv([
+        ["cliente", "encargo", "orden", "paso", "fecha", "hecho"],
+        ...reporte.tareas.flatMap((tarea) =>
+          tarea.pasos.map((paso) => [
+            tarea.nombre_cliente,
+            tarea.titulo,
+            String(paso.orden),
+            paso.nombre,
+            paso.fecha ?? "",
+            paso.hecho_en ?? "",
+          ]),
+        ),
       ]),
     );
     zip.file(

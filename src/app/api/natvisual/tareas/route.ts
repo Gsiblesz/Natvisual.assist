@@ -1,5 +1,4 @@
-import { crearTarea, listarTareas } from "@/lib/estudio";
-import { sincronizarTarea } from "@/lib/integraciones";
+import { crearEncargo, listarTareas } from "@/lib/estudio";
 import { cuentaIdDe, run } from "@/lib/http";
 
 export async function GET(request: Request) {
@@ -8,9 +7,5 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
-  return run(async () => {
-    const tarea = await crearTarea(body);
-    const calendario = await sincronizarTarea(tarea);
-    return { tarea, calendario };
-  });
+  return run(async () => ({ tarea: await crearEncargo(body) }));
 }

@@ -1,7 +1,7 @@
-import { randomBytes } from "node:crypto";
 import { sql } from "./db";
-import { fechaEnCaracas, rangoMes, sumarDias } from "./fechas";
+import { rangoMes } from "./fechas";
 import { calendarioIcs } from "./ics";
+import { pasosConFecha, tipoDe } from "./plan";
 
 export class EstudioError extends Error {
   status: number;
@@ -12,135 +12,65 @@ export class EstudioError extends Error {
 }
 
 export type Estado = "pendiente" | "en_progreso" | "hecho";
-export type Modo = "cliente" | "humana";
+export type EstadoCliente = "activo" | "inactivo" | "archivado";
+
+export type Paso = {
+  id: number;
+  tarea_id: number;
+  orden: number;
+  nombre: string;
+  fecha: string | null;
+  hecho_en: string | null;
+};
 
 export type Tarea = {
   id: number;
   cuenta_id: number;
   nombre_cliente: string;
+  estado_cliente: EstadoCliente;
   titulo: string;
   descripcion: string;
+  tipo: string;
   estado: Estado;
-  prioridad_cliente: number;
-  urgencia_humana: number;
-  prioridad_modo: Modo;
+  urgente: boolean;
   fecha_entrega: string | null;
-  etiqueta: string;
-  google_event_id: string | null;
   creado_en: string;
+  pasos: Paso[];
 };
 
-type TareaRow = Omit<Tarea, "fecha_entrega" | "creado_en" | "google_event_id"> & {
-  fecha_entrega: string | null;
-  google_event_id: string | null;
-  creado_en: string | Date;
+export type Cuenta = {
+  id: number;
+  nombre_cliente: string;
+  estado: EstadoCliente;
 };
 
-const ESTADOS = new Set<Estado>(["pendiente", "en_progreso", "hecho"]);
+const ESTADOS_CLIENTE = new Set<EstadoCliente>(["activo", "inactivo", "archivado"]);
 
 function texto(valor: unknown) {
   if (valor instanceof Date) return valor.toISOString();
   return valor == null ? "" : String(valor);
 }
 
-function mapTarea(row: TareaRow): Tarea {
-  return {
-    ...row,
-    id: Number(row.id),
-    cuenta_id: Number(row.cuenta_id),
-    prioridad_cliente: Number(row.prioridad_cliente),
-    urgencia_humana: Number(row.urgencia_humana),
-    fecha_entrega: row.fecha_entrega ? String(row.fecha_entrega).slice(0, 10) : null,
-    google_event_id: row.google_event_id,
-    creado_en: texto(row.creado_en),
-    descripcion: row.descripcion || "",
-    etiqueta: row.etiqueta || "",
-  };
+function fechaIso(valor: unknown) {
+  if (!valor) return null;
+  if (valor instanceof Date) return valor.toISOString().slice(0, 10);
+  return String(valor).slice(0, 10);
 }
 
-const TAREA_SELECT = `
-  select t.id, t.cuenta_id, c.nombre_cliente, t.titulo, t.descripcion, t.estado,
-    t.prioridad_cliente, t.urgencia_humana, t.prioridad_modo,
-    to_char(t.fecha_entrega, 'YYYY-MM-DD') as fecha_entrega,
-    t.etiqueta, t.google_event_id, t.creado_en
-  from tareas t
-  join cuentas c on c.id = t.cuenta_id
-`;
+function validarFecha(fecha: unknown) {
+  if (fecha === null || fecha === undefined || fecha === "") return null;
+  const valor = String(fecha);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(valor)) throw new EstudioError("La fecha no es válida.");
+  return valor;
+}
 
-export async function listarCuentas() {
-  const cuentas = await sql<{ id: number; nombre_cliente: string }>(
-    "select id, nombre_cliente from cuentas order by nombre_cliente, id",
+// ---------- Clientes ----------
+
+export async function listarCuentas(): Promise<Cuenta[]> {
+  const rows = await sql<Cuenta>(
+    "select id, nombre_cliente, estado from cuentas order by lower(nombre_cliente), id",
   );
-  return cuentas.map((cuenta) => ({ ...cuenta, id: Number(cuenta.id) }));
-}
-
-export async function crearCuenta(nombre: string) {
-  const limpio = nombre.trim();
-  if (!limpio) throw new EstudioError("Escribe el nombre del cliente.");
-  const rows = await sql<{ id: number; nombre_cliente: string }>(
-    "insert into cuentas (nombre_cliente) values ($1) returning id, nombre_cliente",
-    [limpio],
-  );
-  const cuenta = rows[0];
-  await ensureCalendario(Number(cuenta.id));
-  return { ...cuenta, id: Number(cuenta.id) };
-}
-
-export async function listarTareas(cuentaId: number | null) {
-  const rows = await sql<TareaRow>(
-    `${TAREA_SELECT}
-     where ($1::int is null or t.cuenta_id = $1)
-     order by t.fecha_entrega nulls last, t.urgencia_humana, t.prioridad_cliente, t.id`,
-    [cuentaId],
-  );
-  return rows.map(mapTarea);
-}
-
-export type TareaInput = {
-  cuenta_id: number;
-  titulo: string;
-  descripcion?: string;
-  estado?: Estado;
-  prioridad_cliente?: number;
-  urgencia_humana?: number;
-  prioridad_modo?: Modo;
-  fecha_entrega?: string | null;
-  etiqueta?: string;
-  origen?: string;
-};
-
-function prioridad(valor: unknown, fallback: number) {
-  const numero = Number(valor ?? fallback);
-  if (![1, 2, 3].includes(numero)) throw new EstudioError("La prioridad tiene que ser alta, media o baja.");
-  return numero;
-}
-
-function leerTarea(input: TareaInput, previa?: Tarea) {
-  const titulo = String(input.titulo ?? previa?.titulo ?? "").trim();
-  if (!titulo) throw new EstudioError("Escribe qué hay que entregar.");
-  const cuentaId = Number(input.cuenta_id ?? previa?.cuenta_id);
-  if (!Number.isInteger(cuentaId) || cuentaId <= 0) {
-    throw new EstudioError("Elige un cliente.");
-  }
-  const estado = (input.estado ?? previa?.estado ?? "pendiente") as Estado;
-  if (!ESTADOS.has(estado)) throw new EstudioError("Ese estado no existe.");
-  const modo = (input.prioridad_modo ?? previa?.prioridad_modo ?? "cliente") as Modo;
-  if (modo !== "cliente" && modo !== "humana") throw new EstudioError("Elige si manda la marca o el equipo.");
-  const fecha = input.fecha_entrega === undefined ? previa?.fecha_entrega ?? null : input.fecha_entrega;
-  if (fecha && !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
-    throw new EstudioError("La fecha de entrega no es válida.");
-  }
-  return {
-    cuenta_id: cuentaId,
-    titulo,
-    descripcion: String(input.descripcion ?? previa?.descripcion ?? ""),
-    estado,
-    prioridad_cliente: prioridad(input.prioridad_cliente, previa?.prioridad_cliente ?? 2),
-    urgencia_humana: prioridad(input.urgencia_humana, previa?.urgencia_humana ?? 2),
-    prioridad_modo: modo,
-    fecha_entrega: fecha || null,
-    etiqueta: String(input.etiqueta ?? previa?.etiqueta ?? "").trim(),
-  };
+  return rows.map((cuenta) => ({ ...cuenta, id: Number(cuenta.id) }));
 }
 
 async function exigirCuenta(id: number) {
@@ -148,77 +78,287 @@ async function exigirCuenta(id: number) {
   if (!rows[0]) throw new EstudioError("Ese cliente no existe.", 404);
 }
 
-export async function crearTarea(input: TareaInput) {
-  const datos = leerTarea(input);
-  await exigirCuenta(datos.cuenta_id);
-  const rows = await sql<{ id: number }>(
-    `insert into tareas (
-      cuenta_id, titulo, descripcion, estado, prioridad_cliente, urgencia_humana,
-      prioridad_modo, fecha_entrega, etiqueta
-    ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9) returning id`,
-    [
-      datos.cuenta_id,
-      datos.titulo,
-      datos.descripcion,
-      datos.estado,
-      datos.prioridad_cliente,
-      datos.urgencia_humana,
-      datos.prioridad_modo,
-      datos.fecha_entrega,
-      datos.etiqueta,
-    ],
+export async function crearCuenta(nombre: string) {
+  const limpio = nombre.trim();
+  if (!limpio) throw new EstudioError("Escribe el nombre del cliente.");
+  const rows = await sql<Cuenta>(
+    "insert into cuentas (nombre_cliente) values ($1) returning id, nombre_cliente, estado",
+    [limpio],
   );
-  const id = Number(rows[0].id);
-  await sql(
-    `insert into historial (tarea_id, estado_anterior, estado_nuevo, nota)
-     values ($1, null, $2, $3)`,
-    [id, datos.estado, input.origen === "voz" ? "Creada por voz" : "Creada"],
+  return { ...rows[0], id: Number(rows[0].id) };
+}
+
+export async function actualizarCuenta(id: number, input: { nombre_cliente?: string; estado?: string }) {
+  await exigirCuenta(id);
+  if (input.nombre_cliente !== undefined) {
+    const nombre = String(input.nombre_cliente).trim();
+    if (!nombre) throw new EstudioError("Escribe el nombre del cliente.");
+    await sql("update cuentas set nombre_cliente = $2 where id = $1", [id, nombre]);
+  }
+  if (input.estado !== undefined) {
+    if (!ESTADOS_CLIENTE.has(input.estado as EstadoCliente)) throw new EstudioError("Ese estado no existe.");
+    await sql(
+      "update cuentas set estado = $2, estado_desde = now() where id = $1 and estado <> $2",
+      [id, input.estado],
+    );
+  }
+  const rows = await sql<Cuenta>("select id, nombre_cliente, estado from cuentas where id = $1", [id]);
+  return { ...rows[0], id: Number(rows[0].id) };
+}
+
+export async function borrarCuenta(id: number) {
+  await exigirCuenta(id);
+  // Borra en cascada encargos, pasos, historial y avisos de ese cliente.
+  await sql("delete from cuentas where id = $1", [id]);
+}
+
+// ---------- Encargos ----------
+
+type TareaRow = {
+  id: number;
+  cuenta_id: number;
+  nombre_cliente: string;
+  estado_cliente: EstadoCliente;
+  titulo: string;
+  descripcion: string;
+  tipo: string;
+  estado: Estado;
+  urgencia_humana: number;
+  fecha_entrega: string | Date | null;
+  creado_en: string | Date;
+};
+
+const TAREA_SELECT = `
+  select t.id, t.cuenta_id, c.nombre_cliente, c.estado as estado_cliente, t.titulo, t.descripcion,
+    t.tipo, t.estado, t.urgencia_humana,
+    to_char(t.fecha_entrega, 'YYYY-MM-DD') as fecha_entrega, t.creado_en
+  from tareas t
+  join cuentas c on c.id = t.cuenta_id
+`;
+
+type PasoRow = {
+  id: number;
+  tarea_id: number;
+  orden: number;
+  nombre: string;
+  fecha: string | null;
+  hecho_en: string | Date | null;
+};
+
+function mapPaso(row: PasoRow): Paso {
+  return {
+    id: Number(row.id),
+    tarea_id: Number(row.tarea_id),
+    orden: Number(row.orden),
+    nombre: row.nombre,
+    fecha: fechaIso(row.fecha),
+    hecho_en: row.hecho_en ? texto(row.hecho_en) : null,
+  };
+}
+
+async function pasosDe(ids: number[]) {
+  if (!ids.length) return new Map<number, Paso[]>();
+  const rows = await sql<PasoRow>(
+    `select id, tarea_id, orden, nombre, to_char(fecha, 'YYYY-MM-DD') as fecha, hecho_en
+     from pasos where tarea_id = any($1::int[]) order by tarea_id, orden, id`,
+    [ids],
   );
-  return obtenerTarea(id);
+  const mapa = new Map<number, Paso[]>();
+  for (const row of rows) {
+    const paso = mapPaso(row);
+    const lista = mapa.get(paso.tarea_id) || [];
+    lista.push(paso);
+    mapa.set(paso.tarea_id, lista);
+  }
+  return mapa;
+}
+
+async function conPasos(rows: TareaRow[]): Promise<Tarea[]> {
+  const mapa = await pasosDe(rows.map((row) => Number(row.id)));
+  return rows.map((row) => ({
+    id: Number(row.id),
+    cuenta_id: Number(row.cuenta_id),
+    nombre_cliente: row.nombre_cliente,
+    estado_cliente: row.estado_cliente,
+    titulo: row.titulo,
+    descripcion: row.descripcion || "",
+    tipo: row.tipo || "otro",
+    estado: row.estado,
+    urgente: Number(row.urgencia_humana) === 1,
+    fecha_entrega: fechaIso(row.fecha_entrega),
+    creado_en: texto(row.creado_en),
+    pasos: mapa.get(Number(row.id)) || [],
+  }));
+}
+
+export async function listarTareas(cuentaId: number | null = null) {
+  const rows = await sql<TareaRow>(
+    `${TAREA_SELECT}
+     where ($1::int is null or t.cuenta_id = $1)
+     order by t.fecha_entrega nulls last, t.id`,
+    [cuentaId],
+  );
+  return conPasos(rows);
 }
 
 export async function obtenerTarea(id: number) {
   const rows = await sql<TareaRow>(`${TAREA_SELECT} where t.id = $1`, [id]);
-  if (!rows[0]) throw new EstudioError("Esa entrega no existe.", 404);
-  return mapTarea(rows[0]);
+  if (!rows[0]) throw new EstudioError("Ese encargo no existe.", 404);
+  return (await conPasos(rows))[0];
 }
 
-export async function actualizarTarea(id: number, input: Partial<TareaInput>) {
-  const previa = await obtenerTarea(id);
-  const datos = leerTarea({ ...previa, ...input, cuenta_id: input.cuenta_id ?? previa.cuenta_id }, previa);
-  if (datos.cuenta_id !== previa.cuenta_id) await exigirCuenta(datos.cuenta_id);
+async function historial(tareaId: number, antes: string | null, despues: string, nota: string) {
   await sql(
-    `update tareas set
-      cuenta_id = $2, titulo = $3, descripcion = $4, estado = $5,
-      prioridad_cliente = $6, urgencia_humana = $7, prioridad_modo = $8,
-      fecha_entrega = $9, etiqueta = $10, actualizado_en = now()
+    "insert into historial (tarea_id, estado_anterior, estado_nuevo, nota) values ($1, $2, $3, $4)",
+    [tareaId, antes, despues, nota],
+  );
+}
+
+// El estado del encargo sale de sus pasos.
+async function recalcular(tareaId: number, nota: string) {
+  const [fila] = await sql<{ estado: Estado; total: number; hechos: number }>(
+    `select t.estado,
+       (select count(*) from pasos p where p.tarea_id = t.id)::int as total,
+       (select count(*) from pasos p where p.tarea_id = t.id and p.hecho_en is not null)::int as hechos
+     from tareas t where t.id = $1`,
+    [tareaId],
+  );
+  if (!fila) return;
+  const total = Number(fila.total);
+  const hechos = Number(fila.hechos);
+  const nuevo: Estado = total > 0 && hechos === total ? "hecho" : hechos > 0 ? "en_progreso" : "pendiente";
+  await sql("update tareas set estado = $2, actualizado_en = now() where id = $1", [tareaId, nuevo]);
+  await historial(tareaId, fila.estado, nuevo, nota);
+}
+
+export type EncargoInput = {
+  cuenta_id?: number;
+  titulo?: string;
+  descripcion?: string;
+  tipo?: string;
+  fecha_entrega?: string | null;
+  urgente?: boolean;
+  pasos?: { nombre: string; fecha?: string | null }[];
+};
+
+export async function crearEncargo(input: EncargoInput) {
+  const titulo = String(input.titulo ?? "").trim();
+  if (!titulo) throw new EstudioError("Escribe qué hay que hacer.");
+  const cuentaId = Number(input.cuenta_id);
+  if (!Number.isInteger(cuentaId) || cuentaId <= 0) throw new EstudioError("Elige un cliente.");
+  await exigirCuenta(cuentaId);
+  const tipo = tipoDe(String(input.tipo ?? "otro")).id;
+  const fecha = validarFecha(input.fecha_entrega);
+  const pasos = (input.pasos?.length ? input.pasos : pasosConFecha(tipo, fecha))
+    .map((paso) => ({ nombre: String(paso.nombre ?? "").trim(), fecha: validarFecha(paso.fecha) }))
+    .filter((paso) => paso.nombre);
+  if (!pasos.length) throw new EstudioError("El encargo necesita al menos un paso.");
+
+  const [fila] = await sql<{ id: number }>(
+    `insert into tareas (cuenta_id, titulo, descripcion, tipo, estado, urgencia_humana, prioridad_modo, fecha_entrega)
+     values ($1, $2, $3, $4, 'pendiente', $5, 'humana', $6) returning id`,
+    [cuentaId, titulo, String(input.descripcion ?? ""), tipo, input.urgente ? 1 : 2, fecha],
+  );
+  const id = Number(fila.id);
+  for (const [indice, paso] of pasos.entries()) {
+    await sql("insert into pasos (tarea_id, orden, nombre, fecha) values ($1, $2, $3, $4)", [
+      id,
+      indice + 1,
+      paso.nombre,
+      paso.fecha,
+    ]);
+  }
+  await historial(id, null, "pendiente", `Creado con ${pasos.length} pasos`);
+  return obtenerTarea(id);
+}
+
+export async function actualizarEncargo(id: number, input: EncargoInput) {
+  const previa = await obtenerTarea(id);
+  const titulo = input.titulo === undefined ? previa.titulo : String(input.titulo).trim();
+  if (!titulo) throw new EstudioError("Escribe qué hay que hacer.");
+  let cuentaId = previa.cuenta_id;
+  if (input.cuenta_id !== undefined) {
+    cuentaId = Number(input.cuenta_id);
+    await exigirCuenta(cuentaId);
+  }
+  const fecha = input.fecha_entrega === undefined ? previa.fecha_entrega : validarFecha(input.fecha_entrega);
+  await sql(
+    `update tareas set cuenta_id = $2, titulo = $3, descripcion = $4, tipo = $5, urgencia_humana = $6,
+       fecha_entrega = $7, actualizado_en = now()
      where id = $1`,
     [
       id,
-      datos.cuenta_id,
-      datos.titulo,
-      datos.descripcion,
-      datos.estado,
-      datos.prioridad_cliente,
-      datos.urgencia_humana,
-      datos.prioridad_modo,
-      datos.fecha_entrega,
-      datos.etiqueta,
+      cuentaId,
+      titulo,
+      input.descripcion === undefined ? previa.descripcion : String(input.descripcion),
+      input.tipo === undefined ? previa.tipo : tipoDe(String(input.tipo)).id,
+      (input.urgente === undefined ? previa.urgente : input.urgente) ? 1 : 2,
+      fecha,
     ],
-  );
-  const nota =
-    previa.estado === datos.estado ? "Datos actualizados" : "Cambio de estado";
-  await sql(
-    `insert into historial (tarea_id, estado_anterior, estado_nuevo, nota)
-     values ($1, $2, $3, $4)`,
-    [id, previa.estado, datos.estado, nota],
   );
   return obtenerTarea(id);
 }
 
-export async function borrarTarea(id: number) {
+export async function borrarEncargo(id: number) {
   await obtenerTarea(id);
   await sql("delete from tareas where id = $1", [id]);
+}
+
+// ---------- Pasos ----------
+
+async function obtenerPaso(id: number) {
+  const rows = await sql<PasoRow>(
+    `select id, tarea_id, orden, nombre, to_char(fecha, 'YYYY-MM-DD') as fecha, hecho_en
+     from pasos where id = $1`,
+    [id],
+  );
+  if (!rows[0]) throw new EstudioError("Ese paso no existe.", 404);
+  return mapPaso(rows[0]);
+}
+
+export async function agregarPaso(tareaId: number, input: { nombre?: string; fecha?: string | null }) {
+  await obtenerTarea(tareaId);
+  const nombre = String(input.nombre ?? "").trim();
+  if (!nombre) throw new EstudioError("Escribe el nombre del paso.");
+  const [fila] = await sql<{ siguiente: number }>(
+    "select coalesce(max(orden), 0) + 1 as siguiente from pasos where tarea_id = $1",
+    [tareaId],
+  );
+  await sql("insert into pasos (tarea_id, orden, nombre, fecha) values ($1, $2, $3, $4)", [
+    tareaId,
+    Number(fila.siguiente),
+    nombre,
+    validarFecha(input.fecha),
+  ]);
+  await recalcular(tareaId, `Paso agregado: ${nombre}`);
+  return obtenerTarea(tareaId);
+}
+
+export async function actualizarPaso(
+  id: number,
+  input: { nombre?: string; fecha?: string | null; hecho?: boolean },
+) {
+  const paso = await obtenerPaso(id);
+  if (input.nombre !== undefined) {
+    const nombre = String(input.nombre).trim();
+    if (!nombre) throw new EstudioError("Escribe el nombre del paso.");
+    await sql("update pasos set nombre = $2 where id = $1", [id, nombre]);
+  }
+  if (input.fecha !== undefined) {
+    await sql("update pasos set fecha = $2 where id = $1", [id, validarFecha(input.fecha)]);
+  }
+  if (input.hecho !== undefined && Boolean(paso.hecho_en) !== input.hecho) {
+    await sql(`update pasos set hecho_en = ${input.hecho ? "now()" : "null"} where id = $1`, [id]);
+    await recalcular(paso.tarea_id, `${input.hecho ? "Paso hecho" : "Paso reabierto"}: ${paso.nombre}`);
+  }
+  return obtenerTarea(paso.tarea_id);
+}
+
+export async function borrarPaso(id: number) {
+  const paso = await obtenerPaso(id);
+  await sql("delete from pasos where id = $1", [id]);
+  await recalcular(paso.tarea_id, `Paso quitado: ${paso.nombre}`);
+  return obtenerTarea(paso.tarea_id);
 }
 
 export async function historialDe(id: number) {
@@ -234,225 +374,26 @@ export async function historialDe(id: number) {
      from historial where tarea_id = $1 order by creado_en desc, id desc`,
     [id],
   );
-  return rows.map((row) => ({
-    ...row,
-    id: Number(row.id),
-    creado_en: texto(row.creado_en),
-  }));
-}
-
-export async function cargarEjemplo(cuentaId: number) {
-  await exigirCuenta(cuentaId);
-  await sql(
-    "delete from tareas where cuenta_id = $1 and descripcion like '[ejemplo]%'",
-    [cuentaId],
-  );
-  const hoy = fechaEnCaracas();
-  const piezas: Array<Omit<TareaInput, "cuenta_id">> = [
-    {
-      titulo: "Piezas del feed",
-      descripcion: "[ejemplo] Seis piezas para la semana: hotel, restaurante y un reel de ambiente.",
-      estado: "pendiente",
-      etiqueta: "Contenido",
-      fecha_entrega: sumarDias(hoy, 1),
-      prioridad_cliente: 1,
-      urgencia_humana: 2,
-      prioridad_modo: "cliente",
-    },
-    {
-      titulo: "Reel de habitaciones",
-      descripcion: "[ejemplo] 20 segundos. Los primeros 3 tienen que mostrar la vista y la cama.",
-      estado: "en_progreso",
-      etiqueta: "Diseño",
-      fecha_entrega: hoy,
-      prioridad_cliente: 2,
-      urgencia_humana: 1,
-      prioridad_modo: "humana",
-    },
-    {
-      titulo: "Pauta de reservas directas",
-      descripcion: "[ejemplo] Campaña de Meta para bajar la dependencia de intermediarios.",
-      estado: "pendiente",
-      etiqueta: "Pauta",
-      fecha_entrega: sumarDias(hoy, 3),
-      prioridad_cliente: 1,
-      urgencia_humana: 2,
-      prioridad_modo: "cliente",
-    },
-    {
-      titulo: "Guion del spot",
-      descripcion: "[ejemplo] Una idea concreta para el local, sin menú de paquetes.",
-      estado: "pendiente",
-      etiqueta: "Estrategia",
-      fecha_entrega: sumarDias(hoy, 5),
-      prioridad_cliente: 2,
-      urgencia_humana: 2,
-      prioridad_modo: "cliente",
-    },
-    {
-      titulo: "Informe de métricas",
-      descripcion: "[ejemplo] Reservas, gasto y qué pieza sí llenó mesas.",
-      estado: "hecho",
-      etiqueta: "Informe",
-      fecha_entrega: sumarDias(hoy, -2),
-      prioridad_cliente: 3,
-      urgencia_humana: 3,
-      prioridad_modo: "cliente",
-    },
-    {
-      titulo: "Cobertura del evento",
-      descripcion: "[ejemplo] Foto y video corto de la noche. Entrega al día siguiente.",
-      estado: "en_progreso",
-      etiqueta: "Contenido",
-      fecha_entrega: sumarDias(hoy, 2),
-      prioridad_cliente: 2,
-      urgencia_humana: 1,
-      prioridad_modo: "humana",
-    },
-  ];
-  for (const pieza of piezas) {
-    await crearTarea({ ...pieza, cuenta_id: cuentaId, origen: "ejemplo" });
-  }
-  return listarTareas(cuentaId);
-}
-
-export type Calendario = {
-  cuenta_id: number;
-  proveedor: "ics" | "google";
-  correo_equipo: string;
-  google_calendar_id: string;
-  aviso_horas: number;
-  feed_token: string;
-};
-
-export async function ensureCalendario(cuentaId: number): Promise<Calendario> {
-  await exigirCuenta(cuentaId);
-  const actuales = await sql<Calendario>(
-    `select cuenta_id, proveedor, correo_equipo, google_calendar_id, aviso_horas, feed_token
-     from calendarios where cuenta_id = $1`,
-    [cuentaId],
-  );
-  if (actuales[0]) {
-    return { ...actuales[0], cuenta_id: Number(actuales[0].cuenta_id), aviso_horas: Number(actuales[0].aviso_horas) };
-  }
-  const token = randomBytes(24).toString("hex");
-  await sql(
-    `insert into calendarios (cuenta_id, feed_token) values ($1, $2)`,
-    [cuentaId, token],
-  );
-  return {
-    cuenta_id: cuentaId,
-    proveedor: "ics",
-    correo_equipo: "",
-    google_calendar_id: "",
-    aviso_horas: 24,
-    feed_token: token,
-  };
-}
-
-export function feedUrl(origin: string, token: string) {
-  return `${origin.replace(/\/$/, "")}/api/feed/${token}`;
-}
-
-export async function guardarCalendario(
-  cuentaId: number,
-  input: {
-    proveedor?: string;
-    correo_equipo?: string;
-    google_calendar_id?: string;
-    aviso_horas?: number;
-  },
-) {
-  await ensureCalendario(cuentaId);
-  const proveedor = input.proveedor === "google" ? "google" : "ics";
-  const horas = Number(input.aviso_horas ?? 24);
-  if (!Number.isInteger(horas) || horas < 1 || horas > 168) {
-    throw new EstudioError("Las horas de aviso van de 1 a 168.");
-  }
-  await sql(
-    `update calendarios set proveedor = $2, correo_equipo = $3, google_calendar_id = $4, aviso_horas = $5
-     where cuenta_id = $1`,
-    [
-      cuentaId,
-      proveedor,
-      String(input.correo_equipo ?? "").trim(),
-      String(input.google_calendar_id ?? "").trim(),
-      horas,
-    ],
-  );
-  return ensureCalendario(cuentaId);
-}
-
-export async function rotarFeed(cuentaId: number) {
-  await ensureCalendario(cuentaId);
-  const token = randomBytes(24).toString("hex");
-  await sql("update calendarios set feed_token = $2 where cuenta_id = $1", [cuentaId, token]);
-  return ensureCalendario(cuentaId);
-}
-
-export async function calendarioPorToken(token: string) {
-  const rows = await sql<{ cuenta_id: number; nombre_cliente: string }>(
-    `select k.cuenta_id, c.nombre_cliente
-     from calendarios k join cuentas c on c.id = k.cuenta_id
-     where k.feed_token = $1`,
-    [token],
-  );
-  return rows[0] ? { ...rows[0], cuenta_id: Number(rows[0].cuenta_id) } : null;
-}
-
-export async function listarAvisos(cuentaId: number | null) {
-  const rows = await sql<{
-    id: number;
-    titulo: string;
-    canal: string;
-    estado: string;
-    detalle: string;
-    creado_en: string | Date;
-  }>(
-    `select id, titulo, canal, estado, detalle, creado_en
-     from avisos
-     where ($1::int is null or cuenta_id = $1)
-     order by creado_en desc, id desc
-     limit 30`,
-    [cuentaId],
-  );
   return rows.map((row) => ({ ...row, id: Number(row.id), creado_en: texto(row.creado_en) }));
 }
 
+// ---------- Avisos ----------
+
 export async function registrarAviso(input: {
-  cuenta_id: number;
-  tarea_id?: number | null;
+  cuenta_id: number | null;
   titulo: string;
   canal: string;
   estado: string;
   detalle: string;
 }) {
+  if (input.cuenta_id == null) return;
   await sql(
-    `insert into avisos (cuenta_id, tarea_id, titulo, canal, estado, detalle)
-     values ($1, $2, $3, $4, $5, $6)`,
-    [
-      input.cuenta_id,
-      input.tarea_id ?? null,
-      input.titulo,
-      input.canal,
-      input.estado,
-      input.detalle,
-    ],
+    `insert into avisos (cuenta_id, titulo, canal, estado, detalle) values ($1, $2, $3, $4, $5)`,
+    [input.cuenta_id, input.titulo, input.canal, input.estado, input.detalle],
   );
 }
 
-export async function tareasPorVencer(cuentaId: number, horas: number) {
-  const hoy = fechaEnCaracas();
-  const fin = sumarDias(hoy, Math.max(0, Math.ceil(horas / 24)));
-  const tareas = await listarTareas(cuentaId);
-  return tareas.filter(
-    (tarea) =>
-      tarea.estado !== "hecho" &&
-      tarea.fecha_entrega &&
-      tarea.fecha_entrega >= hoy &&
-      tarea.fecha_entrega <= fin,
-  );
-}
+// ---------- Cierre del mes ----------
 
 export async function informeMes(cuentaId: number | null, anio: number, mes: number) {
   if (!Number.isInteger(anio) || !Number.isInteger(mes) || mes < 1 || mes > 12) {
@@ -469,7 +410,7 @@ export async function informeMes(cuentaId: number | null, anio: number, mes: num
      order by t.fecha_entrega nulls last, t.id`,
     [cuentaId, inicio, fin],
   );
-  const tareas = rows.map(mapTarea);
+  const tareas = await conPasos(rows);
   return {
     resumen: {
       total: tareas.length,
@@ -483,7 +424,7 @@ export async function informeMes(cuentaId: number | null, anio: number, mes: num
   };
 }
 
-function csv(filas: string[][]) {
+export function csv(filas: string[][]) {
   return filas
     .map((fila) =>
       fila
@@ -498,11 +439,11 @@ function csv(filas: string[][]) {
 
 export async function armarInforme(cuentaId: number | null, anio: number, mes: number, purgar: boolean) {
   if (purgar && cuentaId == null) {
-    throw new EstudioError("Elige un cliente antes de borrar entregas hechas.");
+    throw new EstudioError("Elige un cliente antes de borrar encargos terminados.");
   }
   const reporte = await informeMes(cuentaId, anio, mes);
   const ids = reporte.tareas.map((t) => t.id);
-  const historial = ids.length
+  const historialFilas = ids.length
     ? await sql<{
         tarea_id: number;
         titulo: string;
@@ -554,16 +495,5 @@ export async function armarInforme(cuentaId: number | null, anio: number, mes: n
     );
     purgadas = borradas.length;
   }
-  return { reporte, historial, avisos, ics, purgadas, csv };
-}
-
-export async function marcarEventoGoogle(tareaId: number, eventId: string) {
-  await sql("update tareas set google_event_id = $2 where id = $1", [tareaId, eventId]);
-}
-
-export function conexionServidor() {
-  return {
-    google: Boolean(process.env.GOOGLE_ACCESS_TOKEN?.trim()),
-    correo: Boolean(process.env.RESEND_API_KEY?.trim()),
-  };
+  return { reporte, historial: historialFilas, avisos, ics, purgadas };
 }

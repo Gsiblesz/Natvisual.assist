@@ -1,5 +1,5 @@
-import { EstudioShell } from "@/components/estudio/shell";
+import { AppShell } from "@/components/app/shell";
 
 export default function NatvisualLayout({ children }: { children: React.ReactNode }) {
-  return <EstudioShell>{children}</EstudioShell>;
+  return <AppShell>{children}</AppShell>;
 }

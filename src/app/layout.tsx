@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Fraunces, Outfit } from "next/font/google";
 import "./globals.css";
 
@@ -13,8 +13,18 @@ const fraunces = Fraunces({
 });
 
 export const metadata: Metadata = {
-  title: "NatVisual — Estudio",
-  description: "Entregas del estudio, por voz o a mano",
+  title: "NatVisual",
+  description: "Encargos y pasos de cada cliente",
+  applicationName: "NatVisual",
+  appleWebApp: { capable: true, title: "NatVisual", statusBarStyle: "black-translucent" },
+  formatDetection: { telephone: false },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#09090b",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -24,9 +34,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es" className={`${outfit.variable} ${fraunces.variable} dark`}>
-      <body className="font-sans antialiased">
-        {children}
-      </body>
+      <body className="bg-zinc-950 font-sans text-zinc-50 antialiased">{children}</body>
     </html>
   );
 }

@@ -1,7 +1,5 @@
-"use client";
+import { Hoy } from "@/components/app/hoy";
 
-import { Tablero } from "@/components/estudio/tablero";
-
-export default function TableroPage() {
-  return <Tablero />;
+export default function Page() {
+  return <Hoy />;
 }
