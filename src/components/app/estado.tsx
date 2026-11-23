@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api-client";
 import { siguientePaso } from "@/lib/plan";
@@ -17,7 +18,7 @@ type App = {
   sinConexion: boolean;
   bloqueado: boolean;
   recargar: () => Promise<void>;
-  avisar: (texto: string, deshacer?: () => void) => void;
+  avisar: (texto: string, deshacer?: () => void, cruzaPantalla?: boolean) => void;
   marcarPaso: (tarea: Tarea, pasoId: number, hecho: boolean) => Promise<void>;
   reemplazarTarea: (tarea: Tarea) => void;
 };
@@ -77,10 +78,23 @@ export function ProveedorApp({ bloqueado, children }: { bloqueado: boolean; chil
     };
   }, [recargar]);
 
-  const avisar = useCallback((texto: string, deshacer?: () => void) => {
+  // El aviso de abajo no sigue a la persona a otra pantalla, salvo el que confirma lo que acaba de guardar.
+  const ruta = usePathname();
+  const rutaDelAviso = useRef(ruta);
+  const sobreviveUnSalto = useRef(false);
+  useEffect(() => {
+    if (rutaDelAviso.current === ruta) return;
+    rutaDelAviso.current = ruta;
+    if (sobreviveUnSalto.current) sobreviveUnSalto.current = false;
+    else setToast(null);
+  }, [ruta]);
+
+  // cruzaPantalla: el aviso confirma algo y la pantalla cambia justo después (guardar, borrar).
+  const avisar = useCallback((texto: string, deshacer?: () => void, cruzaPantalla = false) => {
     window.clearTimeout(reloj.current);
+    sobreviveUnSalto.current = cruzaPantalla;
     setToast({ id: Date.now(), texto, deshacer });
-    reloj.current = window.setTimeout(() => setToast(null), deshacer ? 6000 : 3500);
+    reloj.current = window.setTimeout(() => setToast(null), deshacer ? 6000 : 3000);
   }, []);
 
   const reemplazarTarea = useCallback((tarea: Tarea) => {
@@ -131,9 +145,11 @@ export function ProveedorApp({ bloqueado, children }: { bloqueado: boolean; chil
         <div
           key={toast.id}
           role="status"
-          className="fixed inset-x-3 bottom-[calc(76px+env(safe-area-inset-bottom))] z-50 mx-auto flex max-w-md items-center gap-3 rounded-2xl border border-zinc-700 bg-zinc-800/95 px-4 py-3 text-sm text-zinc-50 shadow-2xl backdrop-blur animate-in fade-in slide-in-from-bottom-2"
+          className="fixed inset-x-3 top-[calc(env(safe-area-inset-top)+8px)] z-50 mx-auto flex max-w-md items-center gap-3 rounded-2xl border border-zinc-700 bg-zinc-800/95 px-4 py-3 text-sm text-zinc-50 shadow-2xl backdrop-blur animate-in fade-in slide-in-from-top-2"
         >
-          <p className="min-w-0 flex-1">{toast.texto}</p>
+          <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setToast(null)}>
+            {toast.texto}
+          </button>
           {toast.deshacer ? (
             <button
               type="button"

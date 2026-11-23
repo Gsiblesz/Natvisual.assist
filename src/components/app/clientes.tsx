@@ -155,7 +155,7 @@ export function Clientes() {
                     <span className="block truncate text-[17px] text-zinc-50">{cuenta.nombre_cliente}</span>
                     <span className="block truncate text-sm text-zinc-500">
                       {dato
-                        ? `${dato.abiertos} ${dato.abiertos === 1 ? "encargo abierto" : "encargos abiertos"}`
+                        ? `${dato.abiertos} ${dato.abiertos === 1 ? "abierto" : "abiertos"}`
                         : "Sin encargos abiertos"}
                       {dato?.sigue ? (
                         <>

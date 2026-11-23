@@ -4,7 +4,7 @@ import { Flame, Pencil, Plus, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api-client";
-import { fieldClass } from "@/lib/etiquetas";
+import { fieldClass, selectClass } from "@/lib/etiquetas";
 import { cuando } from "@/lib/fechas";
 import { progreso, siguientePaso, tipoDe, TIPOS } from "@/lib/plan";
 import { useApp } from "./estado";
@@ -33,7 +33,12 @@ export function Encargo({ id }: { id: number }) {
   const [form, setForm] = useState({ titulo: "", tipo: "otro", fecha_entrega: "", urgente: false, cuenta_id: 0 });
   const [notas, setNotas] = useState(tarea?.descripcion ?? "");
   const [ocupado, setOcupado] = useState(false);
-  const cerrarPaso = useCallback(() => setEditandoPaso(null), []);
+  const [confirmarQuitar, setConfirmarQuitar] = useState(false);
+  const [saliendo, setSaliendo] = useState(false);
+  const cerrarPaso = useCallback(() => {
+    setEditandoPaso(null);
+    setConfirmarQuitar(false);
+  }, []);
   const cerrarEditar = useCallback(() => setEditar(false), []);
   const cerrarBorrar = useCallback(() => setBorrar(false), []);
 
@@ -41,6 +46,8 @@ export function Encargo({ id }: { id: number }) {
   useEffect(() => {
     if (descripcion !== undefined) setNotas(descripcion);
   }, [descripcion]);
+
+  if (saliendo) return null;
 
   if (!tarea) {
     return (
@@ -81,7 +88,8 @@ export function Encargo({ id }: { id: number }) {
     setOcupado(true);
     try {
       await api(`/api/natvisual/tareas/${actual.id}`, { method: "DELETE" });
-      avisar(`${actual.titulo} se borró.`);
+      setSaliendo(true);
+      avisar(`${actual.titulo} se borró.`, undefined, true);
       router.replace(`/natvisual/clientes/${actual.cuenta_id}`);
       await recargar();
     } catch (err) {
@@ -164,6 +172,7 @@ export function Encargo({ id }: { id: number }) {
                 onClick={() => {
                   setPasoNombre(paso.nombre);
                   setPasoFecha(paso.fecha || "");
+                  setConfirmarQuitar(false);
                   setEditandoPaso(paso);
                 }}
               >
@@ -274,11 +283,19 @@ export function Encargo({ id }: { id: number }) {
               disabled={ocupado || pasos.length <= 1}
               className={botonPeligro}
               onClick={async () => {
-                if (await guardar(`/api/natvisual/pasos/${editandoPaso.id}`, "DELETE")) setEditandoPaso(null);
+                // Pide un segundo toque: el botón está justo debajo de «Guardar paso».
+                if (!confirmarQuitar) {
+                  setConfirmarQuitar(true);
+                  return;
+                }
+                if (await guardar(`/api/natvisual/pasos/${editandoPaso.id}`, "DELETE")) {
+                  avisar(`Quitaste «${editandoPaso.nombre}».`);
+                  cerrarPaso();
+                }
               }}
             >
               <Trash2 className="size-5" aria-hidden />
-              Quitar este paso
+              {confirmarQuitar ? "Toca otra vez para quitarlo" : "Quitar este paso"}
             </button>
           </form>
         ) : null}
@@ -316,7 +333,7 @@ export function Encargo({ id }: { id: number }) {
             </label>
             <select
               id="nv-ed-cliente"
-              className={`${fieldClass} mt-1`}
+              className={`${selectClass} mt-1`}
               value={form.cuenta_id}
               onChange={(event) => setForm({ ...form, cuenta_id: Number(event.target.value) })}
             >
@@ -333,7 +350,7 @@ export function Encargo({ id }: { id: number }) {
             </label>
             <select
               id="nv-ed-tipo"
-              className={`${fieldClass} mt-1`}
+              className={`${selectClass} mt-1`}
               value={form.tipo}
               onChange={(event) => setForm({ ...form, tipo: event.target.value })}
             >
@@ -357,15 +374,17 @@ export function Encargo({ id }: { id: number }) {
               onChange={(event) => setForm({ ...form, fecha_entrega: event.target.value })}
             />
           </div>
-          <label className="flex min-h-12 items-center justify-between rounded-2xl border border-zinc-800 bg-zinc-950 px-4">
-            <span className="text-[16px] text-zinc-100">Urgente</span>
-            <input
-              type="checkbox"
-              className="size-6 accent-amber-400"
-              checked={form.urgente}
-              onChange={(event) => setForm({ ...form, urgente: event.target.checked })}
-            />
-          </label>
+          <button
+            type="button"
+            aria-pressed={form.urgente}
+            onClick={() => setForm({ ...form, urgente: !form.urgente })}
+            className={`inline-flex min-h-12 w-full items-center justify-center gap-1.5 rounded-2xl border px-4 text-[15px] ${
+              form.urgente ? "border-red-400/50 bg-red-500/15 text-red-200" : "border-zinc-800 bg-zinc-950 text-zinc-400"
+            }`}
+          >
+            <Flame className="size-4" aria-hidden />
+            {form.urgente ? "Urgente" : "Marcar como urgente"}
+          </button>
           <button type="submit" disabled={ocupado || !form.titulo.trim()} className={botonPrincipal}>
             Guardar
           </button>

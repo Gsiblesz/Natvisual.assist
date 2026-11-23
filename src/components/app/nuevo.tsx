@@ -4,8 +4,8 @@ import { Flame, Mic, Plus, X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api-client";
-import { fieldClass } from "@/lib/etiquetas";
-import { cuando } from "@/lib/fechas";
+import { fieldClass, selectClass } from "@/lib/etiquetas";
+import { cuando, fechaEnCaracas, sumarDias } from "@/lib/fechas";
 import { detectar, pasosConFecha, TIPOS } from "@/lib/plan";
 import { useApp } from "./estado";
 import { Pantalla, botonPrincipal } from "./piezas";
@@ -29,6 +29,21 @@ function reconocedor(): Reconocedor | null {
   };
   const Clase = w.SpeechRecognition || w.webkitSpeechRecognition;
   return Clase ? new Clase() : null;
+}
+
+// Atajos para el pulgar: no dependen del idioma del selector de fecha del teléfono.
+function atajosDeFecha() {
+  const hoy = fechaEnCaracas();
+  const [y, m, d] = hoy.split("-").map(Number);
+  const dia = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  const proximo = (objetivo: number) => sumarDias(hoy, ((objetivo - dia + 7) % 7) || 7);
+  return [
+    { label: "Hoy", fecha: hoy },
+    { label: "Mañana", fecha: sumarDias(hoy, 1) },
+    { label: "Viernes", fecha: proximo(5) },
+    { label: "Lunes", fecha: proximo(1) },
+    { label: "En una semana", fecha: sumarDias(hoy, 7) },
+  ];
 }
 
 let contador = 0;
@@ -64,6 +79,14 @@ export function Nuevo() {
   const [escuchando, setEscuchando] = useState(false);
   const [puedeDictar, setPuedeDictar] = useState(false);
   const porVoz = useRef(false);
+  const filaTipos = useRef<HTMLDivElement>(null);
+
+  // El tipo detectado queda a la vista aunque esté al final de la fila.
+  useEffect(() => {
+    filaTipos.current
+      ?.querySelector<HTMLElement>('[aria-pressed="true"]')
+      ?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+  }, [tipo]);
 
   useEffect(() => {
     setPuedeDictar(reconocedor() !== null);
@@ -163,7 +186,7 @@ export function Nuevo() {
       });
       reemplazarTarea(tarea);
       const frase = `Anotado: ${tarea.titulo}, ${tarea.pasos.length} pasos. Primero: ${tarea.pasos[0]?.nombre}.`;
-      avisar(frase);
+      avisar(frase, undefined, true);
       hablar(frase);
       router.push(desdeCliente ? `/natvisual/clientes/${desdeCliente}` : "/natvisual");
       void recargar();
@@ -193,7 +216,7 @@ export function Nuevo() {
               value={texto}
               onChange={(event) => setTexto(event.target.value)}
               placeholder="Reel de habitaciones para Hotel Mar el viernes"
-              className="w-full rounded-3xl border border-zinc-800 bg-zinc-900 px-4 py-4 pr-16 text-[18px] leading-snug text-zinc-50 outline-none placeholder:text-zinc-600 focus-visible:border-amber-400/70"
+              className="w-full resize-none rounded-3xl border border-zinc-800 bg-zinc-900 px-4 py-4 pr-16 text-[18px] leading-snug text-zinc-50 outline-none placeholder:text-zinc-600 focus-visible:border-amber-400/70"
             />
             {puedeDictar ? (
               <button
@@ -237,7 +260,7 @@ export function Nuevo() {
             {elegibles.length ? (
               <select
                 id="nv-cliente"
-                className={`${fieldClass} mt-1 bg-zinc-950`}
+                className={`${selectClass} mt-1 bg-zinc-950`}
                 value={cuentaId ?? ""}
                 onChange={(event) => {
                   setCuentaId(Number(event.target.value) || null);
@@ -275,7 +298,7 @@ export function Nuevo() {
 
           <div>
             <p className="text-sm text-zinc-400">Tipo</p>
-            <div className="-mx-4 mt-1 flex gap-2 overflow-x-auto px-4 pb-1">
+            <div ref={filaTipos} className="-mx-4 mt-1 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {TIPOS.map((item) => (
                 <button
                   key={item.id}
@@ -327,6 +350,26 @@ export function Nuevo() {
               <Flame className="size-4" aria-hidden />
               Urgente
             </button>
+          </div>
+          <div className="-mx-4 flex gap-2 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {atajosDeFecha().map((atajo) => (
+              <button
+                key={atajo.label}
+                type="button"
+                aria-pressed={fecha === atajo.fecha}
+                onClick={() => {
+                  setFecha(atajo.fecha);
+                  setTocado((t) => ({ ...t, fecha: true, pasos: false }));
+                }}
+                className={`min-h-10 shrink-0 rounded-full border px-4 text-[15px] ${
+                  fecha === atajo.fecha
+                    ? "border-amber-400/60 bg-amber-400/15 text-amber-100"
+                    : "border-zinc-800 bg-zinc-950 text-zinc-400"
+                }`}
+              >
+                {atajo.label}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -401,10 +444,13 @@ export function Nuevo() {
           </div>
         </div>
 
-        <button type="submit" disabled={!listo || guardando} className={botonPrincipal}>
-          {guardando ? "Guardando…" : "Guardar encargo"}
-        </button>
-        {!cuentaId ? <p className="-mt-3 text-center text-sm text-zinc-500">Falta elegir el cliente.</p> : null}
+        {/* Guardar siempre a mano, sin bajar hasta el final. */}
+        <div className="sticky bottom-[calc(env(safe-area-inset-bottom)+76px)] z-30 -mx-4 bg-gradient-to-t from-zinc-950 via-zinc-950/95 to-transparent px-4 pt-4 pb-2">
+          <button type="submit" disabled={!listo || guardando} className={botonPrincipal}>
+            {guardando ? "Guardando…" : "Guardar encargo"}
+          </button>
+          {!cuentaId ? <p className="mt-1 text-center text-sm text-zinc-500">Falta elegir el cliente.</p> : null}
+        </div>
       </form>
     </Pantalla>
   );

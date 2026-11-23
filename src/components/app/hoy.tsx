@@ -34,7 +34,7 @@ function FilaPaso({ item }: { item: Item }) {
           <span className="truncate">{item.paso.nombre}</span>
           {item.tarea.urgente ? <Flame className="size-4 shrink-0 text-red-300" aria-label="Urgente" /> : null}
         </p>
-        <p className="truncate text-sm text-zinc-300">{item.tarea.titulo}</p>
+        <p className="line-clamp-2 text-sm text-zinc-300">{item.tarea.titulo}</p>
         <p className="mt-0.5 truncate text-[13px] text-zinc-500">
           {item.tarea.nombre_cliente} · paso {hechos + 1} de {total}
           {item.fecha ? <span className={colorFecha(item.fecha)}> · {cuando(item.fecha)}</span> : null}

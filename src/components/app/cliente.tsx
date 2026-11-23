@@ -71,7 +71,7 @@ export function Cliente({ id }: { id: number }) {
     setOcupado(true);
     try {
       await api(`/api/admin/cuentas/${id}`, { method: "DELETE" });
-      avisar(`${cuenta.nombre_cliente} se borró.`);
+      avisar(`${cuenta.nombre_cliente} se borró.`, undefined, true);
       router.replace("/natvisual/clientes");
       await recargar();
     } catch (err) {

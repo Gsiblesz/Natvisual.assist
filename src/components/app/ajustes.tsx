@@ -3,7 +3,7 @@
 import { Bell, Download, LogOut, Share, SquarePlus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { api, descargarInforme } from "@/lib/api-client";
-import { fieldClass } from "@/lib/etiquetas";
+import { selectClass } from "@/lib/etiquetas";
 import { fechaEnCaracas } from "@/lib/fechas";
 import { useApp } from "./estado";
 import { Hoja, Pantalla, Seccion, botonPeligro, botonPrincipal, botonSecundario } from "./piezas";
@@ -199,6 +199,22 @@ function Avisos() {
   );
 }
 
+const MESES = [
+  "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+];
+
+// Los últimos 12 meses, escritos en español sin depender del idioma del teléfono.
+function ultimosMeses() {
+  const [anio, mes] = fechaEnCaracas().split("-").map(Number);
+  return Array.from({ length: 12 }, (_, i) => {
+    const total = anio * 12 + (mes - 1) - i;
+    const a = Math.floor(total / 12);
+    const m = (total % 12) + 1;
+    return { valor: `${a}-${String(m).padStart(2, "0")}`, label: `${MESES[m - 1]} ${a}` };
+  });
+}
+
 function CierreDeMes() {
   const { cuentas, avisar, recargar } = useApp();
   const [mes, setMes] = useState(() => fechaEnCaracas().slice(0, 7));
@@ -232,18 +248,23 @@ function CierreDeMes() {
       <p className="text-sm text-zinc-400">
         Baja un ZIP con los encargos, sus pasos y el historial del mes, para guardarlo o mandarlo.
       </p>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="space-y-3">
         <div>
           <label htmlFor="nv-mes" className="text-sm text-zinc-400">
             Mes
           </label>
-          <input
+          <select
             id="nv-mes"
-            type="month"
-            className={`${fieldClass} mt-1 bg-zinc-950`}
+            className={`${selectClass} mt-1 bg-zinc-950`}
             value={mes}
             onChange={(event) => setMes(event.target.value)}
-          />
+          >
+            {ultimosMeses().map((item) => (
+              <option key={item.valor} value={item.valor}>
+                {item.label}
+              </option>
+            ))}
+          </select>
         </div>
         <div>
           <label htmlFor="nv-mes-cliente" className="text-sm text-zinc-400">
@@ -251,7 +272,7 @@ function CierreDeMes() {
           </label>
           <select
             id="nv-mes-cliente"
-            className={`${fieldClass} mt-1 bg-zinc-950`}
+            className={`${selectClass} mt-1 bg-zinc-950`}
             value={cliente}
             onChange={(event) => {
               setCliente(event.target.value);
@@ -292,7 +313,7 @@ function CierreDeMes() {
 
       <Hoja abierta={confirmar} titulo="¿Borrar terminados?" onCerrar={cerrarConfirmar}>
         <p className="mb-5 text-[16px] text-zinc-200">
-          Se baja el ZIP y luego se borran del servidor los encargos terminados de {nombre} en {mes}. El ZIP queda
+          Se baja el ZIP y luego se borran del servidor los encargos terminados de {nombre} en {ultimosMeses().find((item) => item.valor === mes)?.label.toLowerCase()}. El ZIP queda
           como copia.
         </p>
         <button type="button" className={botonPeligro} onClick={() => void descargar()}>

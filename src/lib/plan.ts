@@ -22,7 +22,7 @@ export const TIPOS: Tipo[] = [
       { nombre: "Edición", dia: -2 },
       { nombre: "Aprobación del cliente", dia: -1 },
       { nombre: "Publicar", dia: 0 },
-      { nombre: "Activar ads", dia: 0 },
+      { nombre: "Activar pauta", dia: 0 },
     ],
   },
   {
@@ -172,42 +172,57 @@ function iso(y: number, m: number, d: number) {
   return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
 
+// Conectores antes de una fecha: «para», «pa», «pa'l» (queda «pa l»), «el», «este»…
+const PRE = "(?:(?:para|pa l|pal|pa) )?(?:el |la |este |esta |los |las )?";
+const ORDINAL = "(\\d{1,2})(?:ro|ero|do|to|vo|no|mo|er)?|(primero)";
+
 // Busca la fecha en la frase. Devuelve la fecha y el pedazo de texto que la nombró.
 export function detectarFecha(texto: string, hoy = fechaEnCaracas()): { fecha: string; trozo: string } | null {
   const t = normalizar(texto);
   const [hy, hm, hd] = hoy.split("-").map(Number);
+  const re = (patron: string) => new RegExp(`\\b${PRE}${patron}\\b`);
   let m: RegExpMatchArray | null;
 
-  if ((m = t.match(/\b(?:para |el )?pasado manana\b/))) return { fecha: sumarDias(hoy, 2), trozo: m[0] };
-  if ((m = t.match(/\b(?:para )?manana\b/))) return { fecha: sumarDias(hoy, 1), trozo: m[0] };
-  if ((m = t.match(/\b(?:para )?hoy\b/))) return { fecha: hoy, trozo: m[0] };
-  if ((m = t.match(/\ben (\d{1,2}) dias?\b/))) return { fecha: sumarDias(hoy, Number(m[1])), trozo: m[0] };
-  if ((m = t.match(/\b(?:para )?la (?:proxima|otra) semana\b/))) return { fecha: sumarDias(hoy, 7), trozo: m[0] };
-  if ((m = t.match(/\b(?:para )?(?:el )?fin de mes\b/))) {
+  if ((m = t.match(re("pasado manana")))) return { fecha: sumarDias(hoy, 2), trozo: m[0] };
+  if ((m = t.match(re("manana")))) return { fecha: sumarDias(hoy, 1), trozo: m[0] };
+  if ((m = t.match(re("hoy")))) return { fecha: hoy, trozo: m[0] };
+  if ((m = t.match(re("(?:en|dentro de) (\\d{1,2}) dias?")))) return { fecha: sumarDias(hoy, Number(m[1])), trozo: m[0] };
+  if ((m = t.match(re("(?:proxima|otra) semana|semana que viene")))) return { fecha: sumarDias(hoy, 7), trozo: m[0] };
+  if ((m = t.match(re("fin de mes")))) {
     const ultimo = new Date(Date.UTC(hy, hm, 0)).getUTCDate();
     return { fecha: iso(hy, hm, ultimo), trozo: m[0] };
   }
+  if ((m = t.match(re("(?:finde|fin de semana)(?: que viene)?")))) {
+    // El sábado que viene (hoy mismo si ya es sábado).
+    return { fecha: sumarDias(hoy, (6 - diaSemana(hoy) + 7) % 7), trozo: m[0] };
+  }
 
-  for (m of t.matchAll(/\b(?:para )?(?:el )?(\d{1,2})(?: de (\w+)|\/(\d{1,2})(?:\/(\d{2,4}))?)?\b/g)) {
-    if (m[2] && !MESES.includes(m[2])) continue;
-    if (!m[2] && !m[3] && !/\b(?:para |el )/.test(m[0])) continue;
-    const dia = Number(m[1]);
-    let mes = m[2] ? MESES.indexOf(m[2]) + 1 : m[3] ? Number(m[3]) : hm;
-    let anio = m[4] ? Number(m[4].length === 2 ? `20${m[4]}` : m[4]) : hy;
-    if (!m[2] && !m[3] && dia < hd) {
+  const numero = new RegExp(
+    `\\b${PRE}(?:${ORDINAL})(?: de (\\w+)|\\/(\\d{1,2})(?:\\/(\\d{2,4}))?)?\\b`,
+    "g",
+  );
+  for (m of t.matchAll(numero)) {
+    const dia = m[2] ? 1 : Number(m[1]);
+    const nombreMes = m[3];
+    if (nombreMes && !MESES.includes(nombreMes)) continue;
+    // Un número suelto («3 posts») no es fecha: hace falta «el 3», «para el 3», «3 de…» o «3/12».
+    if (!nombreMes && !m[4] && !/^(?:(?:para|pa l|pal|pa) )?(?:el|los) /.test(m[0])) continue;
+    let mes = nombreMes ? MESES.indexOf(nombreMes) + 1 : m[4] ? Number(m[4]) : hm;
+    let anio = m[5] ? Number(m[5].length === 2 ? `20${m[5]}` : m[5]) : hy;
+    if (!nombreMes && !m[4] && dia < hd) {
       mes += 1;
       if (mes > 12) {
         mes = 1;
         anio += 1;
       }
-    } else if (!m[4] && iso(anio, mes, dia) < hoy) {
+    } else if (!m[5] && iso(anio, mes, dia) < hoy) {
       anio += 1;
     }
     if (fechaValida(anio, mes, dia)) return { fecha: iso(anio, mes, dia), trozo: m[0] };
   }
   m = null;
 
-  m = t.match(/\b(?:para )?(?:el )?(?:proximo )?(lunes|martes|miercoles|jueves|viernes|sabado|domingo)\b/);
+  m = t.match(re("(?:proximo )?(lunes|martes|miercoles|jueves|viernes|sabado|domingo)(?: que viene)?"));
   if (m) {
     const objetivo = DIAS.indexOf(m[1]);
     let salto = (objetivo - diaSemana(hoy) + 7) % 7;
@@ -229,6 +244,12 @@ export function detectarTipo(texto: string) {
   return mejor ? mejor.tipo : TIPOS[TIPOS.length - 1];
 }
 
+// Palabras que no sirven para reconocer a un cliente por sí solas.
+const COMUNES = new Set([
+  "para", "prueba", "grupo", "reel", "post", "video", "fotos", "pauta",
+  "evento", "informe", "historias", "carrusel", "manana", "viernes", "sabado", "domingo",
+]);
+
 export type Detectado = {
   titulo: string;
   tipo: string;
@@ -243,17 +264,39 @@ export function detectar(
   hoy = fechaEnCaracas(),
 ): Detectado {
   let resto = ` ${normalizar(texto)} `;
-  const urgente = /\b(urgente|urge|ya mismo)\b/.test(resto);
-  resto = resto.replace(/\b(urgente|urge|ya mismo)\b/g, " ");
+  const URGENTE = /\b(urgente|urge|ya mismo|de una|para ya|pa ya)\b/g;
+  const urgente = URGENTE.test(resto);
+  resto = resto.replace(URGENTE, " ");
 
   let cuentaId: number | null = null;
+  const quitarCliente = (nombre: string) => {
+    resto = resto.replace(
+      new RegExp(`\\s(?:(?:para|pa l|pal|pa|de|del|en|a|al) )?(?:(?:el|la|los|las) )?${nombre}\\s`),
+      " ",
+    );
+  };
   const porLargo = [...clientes].sort((a, b) => b.nombre_cliente.length - a.nombre_cliente.length);
   for (const cliente of porLargo) {
     const nombre = normalizar(cliente.nombre_cliente);
     if (nombre && resto.includes(` ${nombre} `)) {
       cuentaId = cliente.id;
-      resto = resto.replace(new RegExp(`\\s(?:para|de|del)?\\s*(?:el|la|los|las)?\\s*${nombre}\\s`), " ");
+      quitarCliente(nombre);
       break;
+    }
+  }
+  // Si no dijo el nombre completo, vale una palabra que solo tenga un cliente («la arepera»).
+  if (cuentaId === null) {
+    const candidatos = new Map<number, string>();
+    for (const cliente of clientes) {
+      for (const palabra of normalizar(cliente.nombre_cliente).split(" ")) {
+        if (palabra.length < 4 || COMUNES.has(palabra)) continue;
+        if (resto.includes(` ${palabra} `)) candidatos.set(cliente.id, palabra);
+      }
+    }
+    if (candidatos.size === 1) {
+      const [[id, palabra]] = [...candidatos];
+      cuentaId = id;
+      quitarCliente(palabra);
     }
   }
 
@@ -261,11 +304,18 @@ export function detectar(
   if (fecha) resto = resto.replace(fecha.trozo, " ");
 
   const tipo = detectarTipo(texto);
-  resto = resto
-    .replace(/^\s*(?:nuevo|nueva|hay que hacer|hacer|anota|anotar|agrega|agregar)\s+/, " ")
-    .replace(/\s(?:para|de|del|el|la|con|y)\s*$/g, " ")
-    .replace(/\s(?:para|de|del|el|la|con|y)\s*$/g, " ")
-    .trim();
+  // Muletillas al principio: «chamo, corre con un post…», «me pidieron un reel…».
+  for (let i = 0; i < 4; i += 1) {
+    resto = resto.replace(
+      /^\s*(?:chamo|chama|pana|mano|marico|hermano|porfa|por favor|oye|mira|bueno|ok|dale|corre|apurate|hay que hacer|hay que|tengo que|toca|necesito|necesitamos|me pidieron|pidieron|nos pidieron|nuevo|nueva|hacer|anota|anotar|agrega|agregar|crear|crea|montar|monta|sacar|saca|con)\s+/,
+      " ",
+    );
+  }
+  resto = resto.replace(/^\s*(?:un|una|unos|unas|el|la|los|las)\s+/, " ");
+  for (let i = 0; i < 4; i += 1) {
+    resto = resto.replace(/\s(?:para|pa|pal|l|de|del|el|la|los|las|con|y|este|esta|en|a|al)\s*$/, " ");
+  }
+  resto = resto.trim();
 
   // El título usa las palabras originales (con acentos) cuando se puede.
   const original = texto.trim().replace(/\s+/g, " ");
