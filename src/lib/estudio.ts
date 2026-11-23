@@ -356,6 +356,10 @@ export async function actualizarPaso(
 
 export async function borrarPaso(id: number) {
   const paso = await obtenerPaso(id);
+  const [fila] = await sql<{ total: number }>("select count(*)::int as total from pasos where tarea_id = $1", [
+    paso.tarea_id,
+  ]);
+  if (Number(fila.total) <= 1) throw new EstudioError("El encargo necesita al menos un paso.");
   await sql("delete from pasos where id = $1", [id]);
   await recalcular(paso.tarea_id, `Paso quitado: ${paso.nombre}`);
   return obtenerTarea(paso.tarea_id);

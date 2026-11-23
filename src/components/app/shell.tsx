@@ -91,25 +91,46 @@ function Contenido({ children }: { children: React.ReactNode }) {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [sesion, setSesion] = useState<{ bloqueado: boolean } | null>(null);
+  const [sinRed, setSinRed] = useState(false);
 
   useEffect(() => {
-    fetch("/api/admin/sesion")
-      .then(async (respuesta) => {
-        if (!respuesta.ok) {
-          router.replace("/login");
-          return;
-        }
-        const datos = (await respuesta.json()) as { locked?: boolean };
-        setSesion({ bloqueado: Boolean(datos.locked) });
-      })
-      .catch(() => router.replace("/login"));
+    let vivo = true;
+    let reintento: number | undefined;
+    const revisar = () =>
+      fetch("/api/admin/sesion")
+        .then(async (respuesta) => {
+          if (!vivo) return;
+          if (respuesta.status === 401) {
+            router.replace("/login");
+            return;
+          }
+          if (!respuesta.ok) throw new Error("sin servidor");
+          const datos = (await respuesta.json()) as { locked?: boolean };
+          setSinRed(false);
+          setSesion({ bloqueado: Boolean(datos.locked) });
+        })
+        .catch(() => {
+          // Sin señal o servidor caído: no es falta de clave, se reintenta solo.
+          if (!vivo) return;
+          setSinRed(true);
+          reintento = window.setTimeout(revisar, 5000);
+        });
+    void revisar();
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => undefined);
     }
+    return () => {
+      vivo = false;
+      window.clearTimeout(reintento);
+    };
   }, [router]);
 
   if (!sesion) {
-    return <p className="grid min-h-dvh place-items-center text-zinc-400">Cargando…</p>;
+    return (
+      <p className="grid min-h-dvh place-items-center px-6 text-center text-zinc-400">
+        {sinRed ? "Sin conexión. Vuelvo a intentar en unos segundos…" : "Cargando…"}
+      </p>
+    );
   }
 
   return (

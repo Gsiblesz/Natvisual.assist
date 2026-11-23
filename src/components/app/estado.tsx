@@ -6,7 +6,8 @@ import { api } from "@/lib/api-client";
 import { siguientePaso } from "@/lib/plan";
 import type { Cuenta, Tarea } from "./tipos";
 
-const REFRESCO_MS = 15_000;
+// Un solo usuario: basta refrescar cada minuto y al volver a la app (ahorra datos móviles).
+const REFRESCO_MS = 60_000;
 
 type Toast = { id: number; texto: string; deshacer?: () => void };
 

@@ -350,7 +350,7 @@ export function Ajustes() {
         </Seccion>
       ) : null}
       <p className="px-1 text-center text-xs text-zinc-600">
-        Los datos se actualizan solos cada 15 segundos.
+        Los datos se actualizan solos al abrir la app y cada minuto.
       </p>
     </Pantalla>
   );

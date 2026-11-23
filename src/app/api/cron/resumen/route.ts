@@ -12,6 +12,15 @@ export async function GET(request: Request) {
   if (secreto && request.headers.get("authorization") !== `Bearer ${secreto}`) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
+  if (!secreto && !/vercel-cron/i.test(request.headers.get("user-agent") || "")) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
+  const horaCaracas = Number(
+    new Intl.DateTimeFormat("en-US", { timeZone: "America/Caracas", hour: "numeric", hourCycle: "h23" }).format(new Date()),
+  );
+  if (horaCaracas < 6) {
+    return NextResponse.json({ ok: true, motivo: "Todavía es muy temprano para el resumen." });
+  }
   try {
     const hoy = fechaEnCaracas();
     const tomado = await sql<{ clave: string }>(

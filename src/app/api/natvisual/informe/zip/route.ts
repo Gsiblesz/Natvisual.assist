@@ -86,7 +86,7 @@ export async function POST(request: Request) {
     zip.file("calendario.ics", ics);
     zip.file("resumen.json", JSON.stringify(reporte.resumen, null, 2));
     const buffer = await zip.generateAsync({ type: "nodebuffer" });
-    const nombre = `natvisual-${body.anio}-${String(body.mes).padStart(2, "0")}.zip`;
+    const nombre = `natvisual-${Number(body.anio)}-${String(Number(body.mes)).padStart(2, "0")}.zip`;
     return new NextResponse(new Uint8Array(buffer), {
       headers: {
         "Content-Type": "application/zip",

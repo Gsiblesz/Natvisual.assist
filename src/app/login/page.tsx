@@ -15,10 +15,12 @@ export default function LoginPage() {
   const [listo, setListo] = useState(false);
 
   useEffect(() => {
-    fetch("/api/admin/sesion").then((response) => {
-      if (response.ok) router.replace("/natvisual");
-      else setListo(true);
-    });
+    fetch("/api/admin/sesion")
+      .then((response) => {
+        if (response.ok) router.replace("/natvisual");
+        else setListo(true);
+      })
+      .catch(() => setListo(true));
   }, [router]);
 
   async function entrar(event: React.FormEvent) {
