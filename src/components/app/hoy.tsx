@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { Enlace as Link } from "./nav";
 import { Flame } from "lucide-react";
 import { useMemo } from "react";
 import { cuando, fechaEnCaracas, fechaLarga } from "@/lib/fechas";
@@ -91,7 +91,7 @@ export function Hoy() {
       ) : items.length === 0 ? (
         <Vacio>
           <p>No hay nada pendiente.</p>
-          <p className="mt-1 text-sm text-zinc-500">Toca el + para anotar un encargo nuevo.</p>
+          <p className="mt-1 text-sm text-zinc-500">Toca el micrófono y dilo, o usa Nuevo.</p>
         </Vacio>
       ) : (
         GRUPOS.map((grupo) => {

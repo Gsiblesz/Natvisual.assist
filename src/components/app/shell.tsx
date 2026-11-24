@@ -1,14 +1,22 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Plus, Settings, Sun, Users } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Mic, Plus, Settings, Sun, Users } from "lucide-react";
+import { Suspense, useEffect, useState } from "react";
 import { ProveedorApp, useApp } from "./estado";
+import { Enlace } from "./nav";
+import { CapturaVoz } from "./voz";
+import { Hoy } from "./hoy";
+import { Clientes } from "./clientes";
+import { Cliente } from "./cliente";
+import { Encargo } from "./encargo";
+import { Nuevo } from "./nuevo";
+import { Ajustes } from "./ajustes";
 
 const PESTANAS = [
   { href: "/natvisual", label: "Hoy", icono: Sun },
   { href: "/natvisual/clientes", label: "Clientes", icono: Users },
+  { href: "/natvisual/nuevo", label: "Nuevo", icono: Plus },
   { href: "/natvisual/ajustes", label: "Ajustes", icono: Settings },
 ];
 
@@ -17,50 +25,65 @@ function activa(path: string, href: string) {
   return path.startsWith(href);
 }
 
-function BarraInferior() {
+function BarraInferior({ hablar }: { hablar: () => void }) {
   const path = usePathname();
   const { sinConexion } = useApp();
-  const [hoy, clientes, ajustes] = PESTANAS;
+  const [hoy, clientes, nuevo, ajustes] = PESTANAS;
   const enlace = (item: (typeof PESTANAS)[number]) => {
     const Icono = item.icono;
     const on = activa(path, item.href);
     return (
-      <Link
+      <Enlace
         key={item.href}
         href={item.href}
         aria-current={on ? "page" : undefined}
-        className={`flex min-h-[56px] flex-1 flex-col items-center justify-center gap-0.5 text-[11px] font-medium ${
-          on ? "text-amber-300" : "text-zinc-500"
+        className={`flex min-h-[58px] flex-col items-center justify-center gap-1 text-[11px] font-medium transition-colors ${
+          on ? "text-amber-300" : "text-zinc-500 active:text-zinc-300"
         }`}
       >
-        <Icono className="size-6" strokeWidth={on ? 2.2 : 1.8} aria-hidden />
+        <Icono className="size-[22px]" strokeWidth={on ? 2.3 : 1.8} aria-hidden />
         {item.label}
-      </Link>
+      </Enlace>
     );
   };
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-zinc-800/80 bg-zinc-950/90 backdrop-blur-xl">
+    <nav className="fixed inset-x-0 bottom-0 z-40 px-3 pb-[max(10px,env(safe-area-inset-bottom))]">
       {sinConexion ? (
-        <p className="bg-red-500/15 py-1 text-center text-xs text-red-200">Sin conexión. Vuelvo a intentar solo.</p>
+        <p className="mx-auto mb-2 w-fit rounded-full bg-red-500/20 px-3 py-1 text-center text-xs text-red-100 backdrop-blur">
+          Sin conexión. Vuelvo a intentar solo.
+        </p>
       ) : null}
-      <div className="mx-auto flex max-w-md items-stretch px-2 pb-[env(safe-area-inset-bottom)]">
+      <div className="relative mx-auto grid max-w-md grid-cols-5 items-center rounded-[28px] border border-zinc-800/80 bg-zinc-900/85 shadow-2xl shadow-black/50 backdrop-blur-xl">
         {enlace(hoy)}
         {enlace(clientes)}
-        <div className="flex flex-1 items-center justify-center">
-          <Link
-            href="/natvisual/nuevo"
-            aria-label="Nuevo encargo"
-            className={`grid size-14 -translate-y-3 place-items-center rounded-full bg-amber-400 text-zinc-950 shadow-lg shadow-amber-500/20 active:scale-95 ${
-              path.startsWith("/natvisual/nuevo") ? "ring-4 ring-amber-400/30" : ""
-            }`}
+        <div className="flex justify-center">
+          <button
+            type="button"
+            onClick={hablar}
+            aria-label="Anotar hablando"
+            className="grid size-[62px] -translate-y-4 place-items-center rounded-full bg-amber-400 text-zinc-950 shadow-lg shadow-amber-500/30 ring-[6px] ring-zinc-950 transition active:scale-90"
           >
-            <Plus className="size-7" strokeWidth={2.5} aria-hidden />
-          </Link>
+            <Mic className="size-7" strokeWidth={2.4} aria-hidden />
+          </button>
         </div>
+        {enlace(nuevo)}
         {enlace(ajustes)}
       </div>
     </nav>
   );
+}
+
+// Elige la pantalla por la ruta del navegador: cambiar de pestaña no espera al servidor.
+function PantallaActual({ fallback }: { fallback: React.ReactNode }) {
+  const path = usePathname();
+  let m: RegExpMatchArray | null;
+  if (path === "/natvisual") return <Hoy />;
+  if (path === "/natvisual/clientes") return <Clientes />;
+  if (path === "/natvisual/ajustes") return <Ajustes />;
+  if (path === "/natvisual/nuevo") return <Nuevo key="nuevo" />;
+  if ((m = path.match(/^\/natvisual\/clientes\/(\d+)$/))) return <Cliente key={m[1]} id={Number(m[1])} />;
+  if ((m = path.match(/^\/natvisual\/encargos\/(\d+)$/))) return <Encargo key={m[1]} id={Number(m[1])} />;
+  return <>{fallback}</>;
 }
 
 function Contenido({ children }: { children: React.ReactNode }) {
@@ -85,13 +108,18 @@ function Contenido({ children }: { children: React.ReactNode }) {
       </div>
     );
   }
-  return <>{children}</>;
+  return (
+    <Suspense>
+      <PantallaActual fallback={children} />
+    </Suspense>
+  );
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [sesion, setSesion] = useState<{ bloqueado: boolean } | null>(null);
   const [sinRed, setSinRed] = useState(false);
+  const [voz, setVoz] = useState(false);
 
   useEffect(() => {
     let vivo = true;
@@ -136,7 +164,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <ProveedorApp bloqueado={sesion.bloqueado}>
       <Contenido>{children}</Contenido>
-      <BarraInferior />
+      <BarraInferior hablar={() => setVoz(true)} />
+      <CapturaVoz abierta={voz} cerrar={() => setVoz(false)} />
     </ProveedorApp>
   );
 }

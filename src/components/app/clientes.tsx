@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { Enlace as Link } from "./nav";
 import { ChevronRight, Plus } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";

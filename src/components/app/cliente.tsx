@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
+import { Enlace as Link } from "./nav";
 import { Archive, ArchiveRestore, CirclePause, Ellipsis, Plus, Sun, Trash2 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useIr } from "./nav";
 import { useCallback, useState } from "react";
 import { api } from "@/lib/api-client";
 import { fieldClass } from "@/lib/etiquetas";
@@ -28,7 +28,7 @@ const ETIQUETA: Record<EstadoCliente, string> = {
 
 export function Cliente({ id }: { id: number }) {
   const { cuentas, tareas, recargar, avisar } = useApp();
-  const router = useRouter();
+  const router = useIr();
   const cuenta = cuentas.find((item) => item.id === id);
   const [opciones, setOpciones] = useState(false);
   const [borrar, setBorrar] = useState(false);

@@ -1,7 +1,8 @@
 "use client";
 
 import { Flame, Mic, Plus, X } from "lucide-react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+import { useIr } from "./nav";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api-client";
 import { fieldClass, selectClass } from "@/lib/etiquetas";
@@ -53,9 +54,12 @@ function conClave(pasos: { nombre: string; fecha: string | null }[]): PasoBorrad
 
 export function Nuevo() {
   const { cuentas, recargar, avisar, reemplazarTarea } = useApp();
-  const router = useRouter();
+  const router = useIr();
   const params = useSearchParams();
   const desdeCliente = Number(params.get("cliente")) || null;
+  // Desde la voz: el texto dictado y el cliente que ya se reconoció.
+  const dictado = params.get("texto") || "";
+  const para = Number(params.get("para")) || null;
 
   const elegibles = useMemo(
     () =>
@@ -65,14 +69,14 @@ export function Nuevo() {
     [cuentas, desdeCliente],
   );
 
-  const [texto, setTexto] = useState("");
-  const [cuentaId, setCuentaId] = useState<number | null>(desdeCliente);
+  const [texto, setTexto] = useState(dictado);
+  const [cuentaId, setCuentaId] = useState<number | null>(desdeCliente ?? para);
   const [tipo, setTipo] = useState("otro");
   const [fecha, setFecha] = useState("");
   const [urgente, setUrgente] = useState(false);
   const [titulo, setTitulo] = useState("");
   const [pasos, setPasos] = useState<PasoBorrador[]>(() => conClave(pasosConFecha("otro", null)));
-  const [tocado, setTocado] = useState({ cliente: Boolean(desdeCliente), tipo: false, fecha: false, urgente: false, titulo: false, pasos: false });
+  const [tocado, setTocado] = useState({ cliente: Boolean(desdeCliente ?? para), tipo: false, fecha: false, urgente: false, titulo: false, pasos: false });
   const [nuevoPaso, setNuevoPaso] = useState("");
   const [nuevoCliente, setNuevoCliente] = useState("");
   const [guardando, setGuardando] = useState(false);
@@ -211,7 +215,7 @@ export function Nuevo() {
           <div className="relative">
             <textarea
               id="nv-texto"
-              autoFocus
+              autoFocus={!dictado}
               rows={3}
               value={texto}
               onChange={(event) => setTexto(event.target.value)}
@@ -320,36 +324,20 @@ export function Nuevo() {
             </div>
           </div>
 
-          <div className="grid grid-cols-[1fr_auto] items-end gap-3">
-            <div>
-              <label htmlFor="nv-fecha" className="text-sm text-zinc-400">
-                Entrega {fecha ? <span className="text-zinc-500">· {cuando(fecha).toLowerCase()}</span> : null}
-              </label>
-              <input
-                id="nv-fecha"
-                type="date"
-                className={`${fieldClass} mt-1 bg-zinc-950`}
-                value={fecha}
-                onChange={(event) => {
-                  setFecha(event.target.value);
-                  setTocado((t) => ({ ...t, fecha: true, pasos: false }));
-                }}
-              />
-            </div>
-            <button
-              type="button"
-              aria-pressed={urgente}
-              onClick={() => {
-                setUrgente(!urgente);
-                setTocado((t) => ({ ...t, urgente: true }));
+          <div className="min-w-0">
+            <label htmlFor="nv-fecha" className="text-sm text-zinc-400">
+              Entrega {fecha ? <span className="text-zinc-500">· {cuando(fecha).toLowerCase()}</span> : null}
+            </label>
+            <input
+              id="nv-fecha"
+              type="date"
+              className={`${fieldClass} mt-1 block w-full min-w-0 appearance-none bg-zinc-950`}
+              value={fecha}
+              onChange={(event) => {
+                setFecha(event.target.value);
+                setTocado((t) => ({ ...t, fecha: true, pasos: false }));
               }}
-              className={`inline-flex min-h-12 items-center gap-1.5 rounded-2xl border px-4 text-[15px] ${
-                urgente ? "border-red-400/50 bg-red-500/15 text-red-200" : "border-zinc-800 bg-zinc-950 text-zinc-400"
-              }`}
-            >
-              <Flame className="size-4" aria-hidden />
-              Urgente
-            </button>
+            />
           </div>
           <div className="-mx-4 flex gap-2 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {atajosDeFecha().map((atajo) => (
@@ -371,6 +359,26 @@ export function Nuevo() {
               </button>
             ))}
           </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={urgente}
+            onClick={() => {
+              setUrgente(!urgente);
+              setTocado((t) => ({ ...t, urgente: true }));
+            }}
+            className={`flex min-h-14 w-full items-center justify-between rounded-2xl border px-4 text-[16px] transition-colors ${
+              urgente ? "border-red-400/40 bg-red-500/10 text-red-100" : "border-zinc-800 bg-zinc-950 text-zinc-300"
+            }`}
+          >
+            <span className="inline-flex items-center gap-2">
+              <Flame className={`size-5 ${urgente ? "text-red-300" : "text-zinc-500"}`} aria-hidden />
+              Urgente
+            </span>
+            <span className={`relative h-7 w-12 rounded-full transition-colors ${urgente ? "bg-red-400" : "bg-zinc-700"}`}>
+              <span className={`absolute top-1 size-5 rounded-full bg-white shadow transition-all ${urgente ? "left-6" : "left-1"}`} />
+            </span>
+          </button>
         </div>
 
         <div>
@@ -445,7 +453,7 @@ export function Nuevo() {
         </div>
 
         {/* Guardar siempre a mano, sin bajar hasta el final. */}
-        <div className="sticky bottom-[calc(env(safe-area-inset-bottom)+76px)] z-30 -mx-4 bg-gradient-to-t from-zinc-950 via-zinc-950/95 to-transparent px-4 pt-4 pb-2">
+        <div className="sticky bottom-[calc(env(safe-area-inset-bottom)+100px)] z-30 -mx-4 bg-gradient-to-t from-zinc-950 via-zinc-950/95 to-transparent px-4 pt-4 pb-2">
           <button type="submit" disabled={!listo || guardando} className={botonPrincipal}>
             {guardando ? "Guardando…" : "Guardar encargo"}
           </button>

@@ -1,7 +1,7 @@
 "use client";
 
 import { Flame, Pencil, Plus, Trash2 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useIr } from "./nav";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api-client";
 import { fieldClass, selectClass } from "@/lib/etiquetas";
@@ -22,7 +22,7 @@ import type { Paso, Tarea } from "./tipos";
 
 export function Encargo({ id }: { id: number }) {
   const { tareas, cuentas, marcarPaso, reemplazarTarea, recargar, avisar } = useApp();
-  const router = useRouter();
+  const router = useIr();
   const tarea = tareas.find((item) => item.id === id);
   const [editandoPaso, setEditandoPaso] = useState<Paso | null>(null);
   const [pasoNombre, setPasoNombre] = useState("");

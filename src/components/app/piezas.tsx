@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { Enlace as Link } from "./nav";
 import { Check, ChevronLeft, Flame } from "lucide-react";
 import { useEffect } from "react";
 import { progreso, siguientePaso, tipoDe } from "@/lib/plan";
@@ -21,7 +21,7 @@ export function Pantalla({
   children: React.ReactNode;
 }) {
   return (
-    <main className="mx-auto w-full max-w-md px-4 pt-[calc(env(safe-area-inset-top)+12px)] pb-[calc(env(safe-area-inset-bottom)+104px)]">
+    <main className="mx-auto w-full max-w-md px-4 pt-[calc(env(safe-area-inset-top)+12px)] pb-[calc(env(safe-area-inset-bottom)+120px)]">
       {volver ? (
         <Link
           href={volver.href}
